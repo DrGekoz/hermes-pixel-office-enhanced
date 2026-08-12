@@ -73,7 +73,7 @@
   .pc-av.gh{background:var(--panel2)}
   .pc-tierbox{display:flex;flex-direction:column;align-items:center;gap:1px;flex-shrink:0;
     padding:0 2px;border-right:1px solid var(--borderDim)}
-  .pc-tiermax{width:44px;height:44px;image-rendering:pixelated;object-fit:contain}
+  .pc-tiermax{width:56px;height:56px;image-rendering:pixelated;object-fit:contain}
   .pc-tiernum{color:var(--sub);font-size:.75em}
   .pc-name{font-size:1.167em;color:var(--accent);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .pc-name.dev{color:var(--dev)}
@@ -203,11 +203,15 @@
   .ed-add{cursor:pointer;background:var(--panel2);border:1px solid var(--border);color:var(--accent);
     border-radius:3px;padding:4px 10px;font-family:inherit;font-size:.833em;margin-top:4px}
   .ed-add:hover{border-color:var(--accent)}
-  .ed-tierpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:4px;
-    max-height:150px;overflow-y:auto;padding:4px;border:1px solid var(--borderDim);border-radius:3px;background:var(--bg)}
-  .ed-tierpick img{width:30px;height:30px;image-rendering:pixelated;object-fit:contain;cursor:pointer;
-    border:1px solid var(--borderDim);border-radius:3px;padding:2px;background:var(--panel)}
-  .ed-tierpick img.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .ed-tierpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:4px;
+    max-height:170px;overflow-y:auto;padding:4px;border:1px solid var(--borderDim);border-radius:3px;background:var(--bg)}
+  .ed-tiercell{display:flex;flex-direction:column;align-items:center;cursor:pointer;
+    border:1px solid var(--borderDim);border-radius:3px;padding:2px 1px;background:var(--panel)}
+  .ed-tiercell:hover{border-color:var(--accent)}
+  .ed-tiercell img{width:26px;height:26px;image-rendering:pixelated;object-fit:contain}
+  .ed-tiercell .ed-tiernum{font-size:.58em;color:var(--sub);line-height:1}
+  .ed-tiercell.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .ed-tiercell.sel .ed-tiernum{color:var(--accent)}
   .ed-theme-row{display:flex;align-items:center;gap:8px;margin:5px 0}
   .ed-theme-row label{flex:1;color:var(--text);font-size:.833em}
   .ed-theme-row input[type=color]{width:34px;height:24px;border:1px solid var(--border);border-radius:3px;
@@ -218,6 +222,9 @@
   .ed-save{display:block;width:100%;cursor:pointer;background:var(--accent);color:#000;border:none;
     border-radius:3px;padding:9px;font-family:inherit;font-size:1em;font-weight:bold;margin-top:10px}
   .ed-save:hover{filter:brightness(1.1)}
+  .ed-logout{display:block;width:100%;cursor:pointer;background:#d84f6f;color:#fff;border:none;
+    border-radius:3px;padding:9px;font-family:inherit;font-size:.917em;font-weight:bold;margin-top:8px}
+  .ed-logout:hover{background:#f06f90}
   .ed-status{color:var(--green);font-size:.833em;padding:6px 12px;display:none}
   /* about / credits */
   #about{left:50%;top:50%;transform:translate(-50%,-50%);width:440px;max-height:86%;pointer-events:auto}
@@ -232,6 +239,40 @@
     border:1px solid var(--border);border-radius:3px;padding:4px 8px;text-decoration:none;font-size:.833em}
   .ab-link:hover{border-color:var(--accent);color:var(--accent)}
   .ab-link img{width:14px;height:14px;object-fit:contain}
+  /* tier tooltip (top-right) */
+  #tooltip{position:fixed;top:10px;right:10px;z-index:60;pointer-events:none;
+    background:var(--panel);border:2px solid var(--border);border-radius:6px;padding:10px 12px;
+    max-width:240px;display:none;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  #tooltip .tt-top{display:flex;align-items:center;gap:10px}
+  #tooltip img{width:64px;height:64px;image-rendering:pixelated;object-fit:contain;flex-shrink:0}
+  #tooltip .tt-name{color:var(--accent);font-weight:bold;font-size:1em}
+  #tooltip .tt-num{color:var(--sub);font-size:.75em}
+  #tooltip .tt-req{color:var(--text);font-size:.833em;margin-top:6px}
+  #tooltip .tt-mat{color:var(--sub);font-size:.75em;margin-top:2px}
+  /* silhouette for locked tiers */
+  .tier-row.locked .tier-ic{filter:grayscale(1) brightness(.4) opacity(.55)}
+  /* agents roster in profile */
+  .pc-aglist{display:flex;flex-direction:column;gap:3px;margin-top:4px}
+  .pc-ag{display:flex;align-items:center;gap:6px;font-size:.833em;color:var(--text)}
+  .pc-ag .ag-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .pc-ag .ag-st{color:var(--sub);margin-left:auto}
+  /* tier unlock modal */
+  #unlock{left:50%;top:50%;transform:translate(-50%,-50%);width:380px;pointer-events:auto}
+  .un-body{padding:12px;text-align:center}
+  .un-title{color:var(--accent);font-size:1em;font-weight:bold;letter-spacing:1px;margin-bottom:4px}
+  .un-sub{color:var(--sub);font-size:.833em;margin-bottom:12px}
+  .un-compare{display:flex;align-items:center;justify-content:center;gap:16px}
+  .un-card{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .un-card img{width:72px;height:72px;image-rendering:pixelated;object-fit:contain;
+    border:1px solid var(--border);border-radius:6px;padding:6px;background:var(--bg)}
+  .un-card .un-lbl{color:var(--sub);font-size:.75em}
+  .un-card.new img{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .un-arrow{color:var(--sub);font-size:1.2em}
+  .un-btns{display:flex;gap:8px;margin-top:14px}
+  .un-btn{flex:1;cursor:pointer;background:var(--panel2);border:1px solid var(--border);
+    color:var(--text);border-radius:3px;padding:8px;font-family:inherit;font-size:.833em}
+  .un-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .un-btn.primary{background:var(--accent);color:#000;border:none;font-weight:bold}
 
 </style>
 </head>
@@ -289,18 +330,20 @@
           </div>
         </div>
       </div>
+      <div class="panel" id="unlock"></div>
       <div class="panel" id="gh-connect">
         <div class="ptitle"><span>CONNECT GITHUB</span><span class="pclose" data-close="gh-connect">✕</span></div>
         <div class="gh-form">
           <button class="primary" id="gh-login" style="padding:9px 10px">⇪ Log in with GitHub</button>
-          <div class="hint">Logs in with the GitHub account this machine is authenticated as, so your real username + avatar show on the leaderboard. Logging in is what lets your scores and chat reach other users over P2P.</div>
-          <div class="row"><button id="gh-profile" style="flex:1">✎ Edit Profile</button><button id="gh-clear">Disconnect</button></div>
+          <div class="hint">Logs in with the GitHub account this machine is authenticated as, so your real username + avatar show on the leaderboard. Logging in is what lets your scores and chat reach other users over P2P. Click your name in the top bar to open your profile.</div>
+          <div class="row"><button id="gh-clear" style="flex:1">Disconnect</button></div>
         </div>
         <div id="gh-status"></div>
       </div>
     </div>
   </div>
 </div>
+<div id="tooltip"></div>
 <script src="tiers.js"></script>
 <script src="p2p.js"></script>
 <script>
@@ -328,6 +371,10 @@ function fmtTime(s){s=Math.floor(Number(s)||0);const h=Math.floor(s/3600),m=Math
   if(h)return h+"h "+m+"m";if(m)return m+"m "+sec+"s";return sec+"s"}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function iconPath(name){return "icons/"+(name||"001_Wood_Heraldic_Shield_orig462")+".webp"}
+function iconPathLarge(name){return "icons/large/"+(name||"001_Wood_Heraldic_Shield_orig462")+".webp"}
+// Ops-derived requirements: ~2 Ops per tool call, ~150 calls per session.
+function tierCalls(ops){return Math.ceil((Number(ops)||0)/2);}
+function tierSessions(ops){return Math.ceil(tierCalls(ops)/150);}
 function timeStr(ts){const d=new Date(ts*1000);return d.toTimeString().slice(0,5)}
 function isDev(g){return /^drgekoz$/i.test(g||"")}
 function isMe(id){return state&&state.identity&&(id===state.identity.github||id===state.identity.name)}
@@ -379,6 +426,88 @@ function myGitHub(){return (state&&state.identity&&state.identity.github)?state.
 function isMine(r){const g=myGitHub();return !!g&&String(r&&r.github||"").toLowerCase()===g.toLowerCase();}
 // apply a locally-saved interface theme (persists across reloads, pre-server)
 try{const lt=localStorage.getItem("pixelOfficeTheme");if(lt){const t=JSON.parse(lt);if(t&&typeof t==="object")applyInterfaceTheme(t);}}catch(e){}
+
+// ── local profile cache (overlay so edits work even before server restart) ──
+function localProfileKey(){const g=myGitHub();return g?"pixelOfficeProfile_"+g.toLowerCase():"";}
+function loadLocalProfile(){const k=localProfileKey();if(!k)return null;try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function saveLocalProfile(p){const k=localProfileKey();if(!k)return;try{localStorage.setItem(k,JSON.stringify(p));}catch(e){}}
+function applyLocalProfile(){
+  if(!state||!state.identity||!state.identity.github)return;
+  const gh=state.identity.github.toLowerCase();
+  const prof=loadLocalProfile();
+  if(!prof)return;
+  const row=(state.leaderboard||[]).find(r=>r.github&&String(r.github).toLowerCase()===gh);
+  if(!row)return;
+  if(prof.bio!=null)row.bio=prof.bio;
+  if(prof.links)row.links=prof.links;
+  if(prof.tierIcon!=null)row.tierIcon=prof.tierIcon;
+  if(prof.profileTheme)row.profileTheme=prof.profileTheme;
+  if(prof.interfaceTheme)row.interfaceTheme=prof.interfaceTheme;
+}
+function pushMyProfile(){
+  applyLocalProfile();
+  if(window.PixelOfficeP2P && window.PixelOfficeP2P.isStarted() && localRow()){
+    PixelOfficeP2P.broadcastScore(localRow());
+  }
+  renderLeaderboard();renderTiers();renderChat();
+}
+function statusColor(s){return {working:"#5fce7a",thinking:"#c9a227",idle:"#7a6f8f",
+  waiting:"#d84f6f",done:"#5fce7a",gone:"#555"}[s]||"#7a6f8f";}
+
+// ── tier unlock detection + modal ──────────────────────────────────────
+let lastTierT=0, unlockInit=false;
+function myCurrentTier(){
+  if(!state||!state.identity)return null;
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const my=board.find(r=>isMe(r.id));
+  return my?(tierForOps(my.ops)||null):null;
+}
+function checkTierUnlock(){
+  const t=myCurrentTier();
+  if(!t||!t.t)return;
+  if(!unlockInit){lastTierT=t.t;unlockInit=true;return;} // don't popup for already-earned on load
+  if(t.t>lastTierT){
+    if(soundOn)chime([660,880,1320,1760]); // tier-up fanfare
+    showUnlockModal(t);
+    lastTierT=t.t;
+  }
+}
+function showUnlockModal(tier){
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const my=board.find(r=>isMe(r.id));
+  const curIcon=(my&&my.tierIcon)||"";
+  const el=document.getElementById("unlock");
+  el.innerHTML=
+    '<div class="ptitle"><span>TIER UNLOCKED!</span><span class="pclose" data-close="unlock">✕</span></div>'+
+    '<div class="un-body">'+
+      '<div class="un-title">'+esc(tier.name)+' · Tier '+tier.t+'</div>'+
+      '<div class="un-sub">You reached Tier '+tier.t+' ('+fmtNum(tier.ops)+' Ops). Choose your icon.</div>'+
+      '<div class="un-compare">'+
+        '<div class="un-card new"><img src="'+iconPathLarge(tier.icon)+'" alt="" onerror="this.style.display=\'none\'"><span class="un-lbl">New · #'+tier.t+'</span></div>'+
+        '<div class="un-arrow">→</div>'+
+        '<div class="un-card"><img src="'+iconPathLarge(curIcon||tier.icon)+'" alt="" onerror="this.style.display=\'none\'"><span class="un-lbl">'+(curIcon?'Your icon':'New')+'</span></div>'+
+      '</div>'+
+      '<div class="un-btns">'+
+        '<button class="un-btn" id="un-keep">Keep my icon</button>'+
+        '<button class="un-btn primary" id="un-use">Use new icon</button>'+
+      '</div>'+
+    '</div>';
+  el.querySelector(".pclose").onclick=()=>togglePanel("unlock",false);
+  document.getElementById("un-keep").onclick=()=>togglePanel("unlock",false);
+  document.getElementById("un-use").onclick=()=>{
+    if(myGitHub())setMyTierIcon(tier.icon);
+    togglePanel("unlock",false);
+  };
+  togglePanel("unlock",true);
+}
+function setMyTierIcon(icon){
+  const prof=loadLocalProfile()||{};
+  prof.tierIcon=icon;
+  saveLocalProfile(prof);
+  pushMyProfile();
+  fetch("profile",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({tierIcon:icon})}).catch(()=>{});
+}
 
 // ── office scene ────────────────────────────────────────────────────────
 function drawOffice(w,h){
@@ -551,7 +680,10 @@ document.getElementById("lbBtn").onclick=()=>togglePanel("lb");
 document.getElementById("chatBtn").onclick=()=>togglePanel("chat");
 document.getElementById("tiersBtn").onclick=()=>togglePanel("tiers");
 document.getElementById("aboutBtn").onclick=()=>togglePanel("about");
-document.getElementById("gh-chip").onclick=()=>togglePanel("gh-connect");
+document.getElementById("gh-chip").onclick=()=>{
+  // when connected, clicking your name in the top bar opens your profile
+  if(myGitHub()){showProfile(myGitHub());}else{togglePanel("gh-connect");}
+};
 
 // ── leaderboard ────────────────────────────────────────────────────────
 function tierRowHtml(r){
@@ -621,6 +753,13 @@ function showProfile(id){
   const links=r.links||{};
   const bio=(r.bio||"").trim();
   const agents=(r.agents||[]).map(a=>esc(a.label)).join(" · ")||"—";
+  const activeAgents=(r.agents||[]).filter(a=>a.status && a.status!=="idle" && a.status!=="gone");
+  const agRoster=activeAgents.length
+    ? '<div class="pc-aglist">'+activeAgents.map(a=>
+        '<div class="pc-ag"><span class="ag-dot" style="background:'+statusColor(a.status)+'"></span>'+
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px">'+esc(a.label)+'</span>'+
+        '<span class="ag-st">'+esc(a.status||"idle")+'</span></div>').join("")+'</div>'
+    : '<div style="color:var(--sub);font-size:.833em">no active agents</div>';
   let linksHtml="";
   LINK_PLATFORMS.forEach(p=>{
     (links[p.key]||[]).filter(Boolean).forEach(u=>{
@@ -632,7 +771,7 @@ function showProfile(id){
     '<div class="ptitle"><span>PROFILE · '+r.rank+'</span><span class="pclose" data-close="prof">✕</span></div>'+
     '<div class="pc-head">'+
       (avatar?'<img class="pc-av" src="'+esc(avatar)+'" alt="" onerror="this.style.display=\'none\'">':'<div class="pc-av gh"></div>')+
-      '<div class="pc-tierbox"><img class="pc-tiermax" src="'+iconPath(tierIcon)+'" alt="" onerror="this.style.display=\'none\'">'+
+      '<div class="pc-tierbox"><img class="pc-tiermax" src="'+iconPathLarge(tierIcon)+'" alt="" onerror="this.style.display=\'none\'">'+
         '<span class="pc-tiernum">#'+(tier.t||"")+'</span></div>'+
       '<div style="flex:1;min-width:0">'+
         '<div class="pc-name'+(dev?" dev":"")+'" style="color:'+nameColor+'">'+esc(r.name)+
@@ -650,7 +789,7 @@ function showProfile(id){
       '<div class="pc-stat"><div class="lbl">TIME RAN</div><div class="val">'+fmtTime(r.time_s)+'</div></div>'+
       '</div>'+
     (mine?'<div class="pc-actions"><button class="pc-editbtn" id="edit-profile-btn">✎ Edit Profile</button></div>':'')+
-    '<div class="pc-agents"><b>AGENTS:</b> '+agents+'</div>';
+    '<div class="pc-agents"><b>AGENTS</b>'+agRoster+'</div>';
   document.getElementById("prof").querySelector(".pclose").onclick=()=>togglePanel("prof",false);
   const eb=document.getElementById("edit-profile-btn");
   if(eb)eb.onclick=()=>{togglePanel("prof",false);openEditProfile(r);};
@@ -722,6 +861,7 @@ function openEditProfile(r){
       '</div>'+
       '<div class="ed-section" style="border:none">'+
         '<button class="ed-save" id="ed-save">Save Profile</button>'+
+        '<button class="ed-logout" id="ed-logout">Log out</button>'+
       '</div>'+
     '</div>'+
     '<div class="ed-status" id="ed-status"></div>';
@@ -729,13 +869,23 @@ function openEditProfile(r){
 
   const pick=document.getElementById("ed-tierpick");
   (window.OFFICE_TIERS||[]).forEach(t=>{
+    const cell=document.createElement("div");
+    cell.className="ed-tiercell"+(t.icon===editTier?" sel":"");
+    cell.title=t.name+" (#"+t.t+")";
     const im=document.createElement("img");
     im.src=iconPath(t.icon);
-    im.title=t.name+" (#"+t.t+")";
+    im.alt="";
     im.onerror=()=>{im.style.display="none";};
-    if(t.icon===editTier)im.className="sel";
-    im.onclick=()=>{editTier=t.icon;pick.querySelectorAll("img").forEach(x=>x.classList.remove("sel"));im.classList.add("sel");};
-    pick.appendChild(im);
+    const num=document.createElement("span");
+    num.className="ed-tiernum";
+    num.textContent="#"+(t.t);
+    cell.appendChild(im);cell.appendChild(num);
+    cell.onclick=()=>{
+      editTier=t.icon;
+      pick.querySelectorAll(".ed-tiercell").forEach(x=>x.classList.remove("sel"));
+      cell.classList.add("sel");
+    };
+    pick.appendChild(cell);
   });
 
   function collectLinks(){
@@ -772,18 +922,33 @@ function openEditProfile(r){
   const status=document.getElementById("ed-status");
   document.getElementById("ed-save").onclick=()=>{
     editBio=document.getElementById("ed-bio").value;
-    const payload={bio:editBio,links:collectLinks(),tierIcon:editTier,profileTheme:editProf,interfaceTheme:editIface};
-    // persist the interface theme locally so it survives reloads even before
-    // the server is restarted, and so it's not lost if save/state fails.
+    const links=collectLinks();
+    const payload={bio:editBio,links:links,tierIcon:editTier,profileTheme:editProf,interfaceTheme:editIface};
+    // Save locally first so edits apply immediately, even before the server
+    // is restarted (server /profile may 404 until then).
+    const prof=loadLocalProfile()||{};
+    prof.bio=editBio; prof.links=links; prof.tierIcon=editTier;
+    prof.profileTheme=editProf; prof.interfaceTheme=editIface;
+    saveLocalProfile(prof);
     try{localStorage.setItem("pixelOfficeTheme",JSON.stringify(editIface));}catch(e){}
     status.style.color="var(--green)";
+    status.style.display="block";status.textContent="Saved ✓";
+    setTimeout(()=>{status.style.display="none";},2200);
+    pushMyProfile();
+    // best-effort server sync (persists server-side after a Hermes restart)
     fetch("profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
-      .then(r=>r.json()).then(()=>{
-        status.style.display="block";status.textContent="Saved ✓ — rebroadcasting…";
-        setTimeout(()=>{status.style.display="none";},2200);
-        pollNow();
-      })
-      .catch(()=>{status.style.display="block";status.style.color="var(--danger)";status.textContent="Save failed (theme kept locally)";});
+      .catch(()=>{});
+    pollNow();
+  };
+  const logoutBtn=document.getElementById("ed-logout");
+  if(logoutBtn)logoutBtn.onclick=()=>{
+    try{localStorage.removeItem(localProfileKey());}catch(e){}
+    try{localStorage.removeItem("pixelOfficeTheme");}catch(e){}
+    applyInterfaceTheme(null);
+    togglePanel("edit",false);
+    fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({github:""})})
+      .then(()=>pollNow()).catch(()=>pollNow());
   };
   el.querySelector(".pclose").onclick=()=>togglePanel("edit",false);
   togglePanel("edit",true);
@@ -825,6 +990,20 @@ function renderTiers(){
       '<span class="tier-ops"><b>'+fmtNum(t.ops)+'</b> Ops'+(current?' · you':"")+'</span>'+
       '</div>';
   }).join("");
+  // on-hover tier tooltip (top-right): large icon + requirements
+  const tip=document.getElementById("tooltip");
+  [...el.children].forEach((row,i)=>{
+    const t=tiers[i];
+    row.onmouseenter=()=>{
+      tip.innerHTML='<div class="tt-top"><img src="'+iconPathLarge(t.icon)+'" alt="" onerror="this.style.display=\'none\'">'+
+        '<div><div class="tt-name">'+esc(t.name)+'</div><div class="tt-num">Tier #'+t.t+'</div></div></div>'+
+        '<div class="tt-req">Requires <b style="color:var(--accent)">'+fmtNum(t.ops)+'</b> Ops</div>'+
+        '<div class="tt-req">≈ '+fmtNum(tierCalls(t.ops))+' calls · ≈ '+fmtNum(tierSessions(t.ops))+' sessions</div>'+
+        '<div class="tt-mat">'+esc(t.material||"")+'</div>';
+      tip.style.display="block";
+    };
+    row.onmouseleave=()=>{tip.style.display="none";};
+  });
 }
 
 // ── chat (via P2P mesh) ───────────────────────────────────────────────
@@ -866,7 +1045,7 @@ function chatMsgHtml(m){
   const tier=(tIcon)
     ? '<span class="ctierl"><img src="'+iconPath(tIcon)+'" alt="" onerror="this.style.display=\'none\'"><b>#'+esc(tierNo)+'</b></span>'
     : '';
-  return '<div class="cmsg">'+
+  return '<div class="cmsg"'+(m.github?' data-github="'+esc(m.github)+'" title="open profile"':'')+'>'+
     tier+
     (m.avatar?'<img class="cav" src="'+esc(m.avatar)+'" alt="">':'<div class="cav gh"></div>')+
     '<div class="cbody"><div class="cuser">'+
@@ -907,6 +1086,10 @@ function renderChat(){
     }
   });
   el.innerHTML=msgs.map(chatMsgHtml).join("");
+  el.querySelectorAll(".cmsg[data-github]").forEach(r=>{
+    r.style.cursor="pointer";
+    r.onclick=()=>{const g=r.getAttribute("data-github");if(g)showProfile(g);};
+  });
   el.scrollTop=el.scrollHeight;
 }
 function sendChat(){
@@ -940,23 +1123,9 @@ function renderIdentity(){
   }else{
     st.className="";st.textContent="not connected — agents show as their session label.";
   }
+  const loginBtn=document.getElementById("gh-login");
+  if(loginBtn)loginBtn.textContent=(id&&id.github)?"✓ Logged in with GitHub":"⇪ Log in with GitHub";
 }
-document.getElementById("gh-profile").onclick=()=>{
-  if(!myGitHub()){
-    const st=document.getElementById("gh-status");
-    st.className="err";st.textContent="connect a GitHub identity first (log in or pick a username).";
-    return;
-  }
-  // build/edit the current user's profile from the board (or a fresh row)
-  const board=mergeBoards(currentBoard(),loadCachedBoard());
-  let row=board.find(r=>r.github&&r.github.toLowerCase()===myGitHub().toLowerCase());
-  if(!row)row={id:myGitHub(),name:myGitHub(),github:myGitHub(),avatar:"",
-    url:"https://github.com/"+myGitHub(),ops:0,tools:0,sessions:0,time_s:0,tier:null,
-    agents:[],bio:"",links:{github:[myGitHub()?"https://github.com/"+myGitHub():""]},
-    tierIcon:"",profileTheme:{},interfaceTheme:{}};
-  togglePanel("gh-connect",false);
-  openEditProfile(row);
-};
 document.getElementById("gh-clear").onclick=()=>{
   fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({github:""})})
@@ -1057,6 +1226,20 @@ function applyState(st){
   document.getElementById("st-tools").textContent=fmtNum(gs.tools||0);
   document.getElementById("st-sess").textContent=fmtNum(gs.sessions||0);
   document.getElementById("st-time").textContent=fmtTime(gs.time_ms?gs.time_ms/1000:0);
+  // Attach live agent status (from the office scene) to every row's roster so
+  // profile AGENTS lists show real-time state even before the server restarts.
+  if(st.agents&&st.agents.length){
+    const sceneMap={};
+    st.agents.forEach(a=>sceneMap[a.id]=a);
+    (st.leaderboard||[]).forEach(r=>{
+      (r.agents||[]).forEach(ag=>{
+        const sa=sceneMap[ag.id];
+        if(sa){ag.status=sa.status||"";ag.tool=sa.tool||"";ag.activity=sa.activity||"";ag.detail=sa.detail||"";}
+      });
+    });
+  }
+  // Overlay the locally-saved profile (works before the server is restarted).
+  applyLocalProfile();
   // Apply the local viewer's interface theme from their own leaderboard row.
   // If the server row carries no theme yet (e.g. server not restarted), keep
   // whatever is currently applied (default or the locally-saved theme).
@@ -1074,6 +1257,16 @@ function applyState(st){
   renderTiers();
   renderChat();
   saveCachedBoard(mergeBoards(currentBoard(),loadCachedBoard()));
+  checkTierUnlock();
+}
+// Global refresh — pull /state + re-render (used by profile save/logout/icon pickers).
+let polling=false;
+async function pollNow(){
+  if(polling)return; polling=true;
+  try{const r=await fetch("state");applyState(await r.json());}
+  catch(e){offline=String(location.host);agents=[];state=null;
+    document.getElementById("count").textContent="offline";}
+  polling=false;
 }
 if(IN_VSCODE){
   window.addEventListener("message",(ev)=>{
@@ -1083,14 +1276,6 @@ if(IN_VSCODE){
       document.getElementById("count").textContent="offline";}
   });
 }else{
-  let polling=false;
-  async function pollNow(){
-    if(polling)return; polling=true;
-    try{const r=await fetch("state");applyState(await r.json());}
-    catch(e){offline=String(location.host);agents=[];state=null;
-      document.getElementById("count").textContent="offline";}
-    polling=false;
-  }
   (function loop(){pollNow();setTimeout(loop,1500);})();
 }
 render();

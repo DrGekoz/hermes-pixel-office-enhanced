@@ -82,6 +82,7 @@ window.PixelOfficeP2P = (function () {
       tierIcon: serverRow.tierIcon || "",
       profileTheme: serverRow.profileTheme || {},
       interfaceTheme: serverRow.interfaceTheme || {},
+      agents: serverRow.agents || [],
       counter: ++entryCounter,
       ts: Date.now(),
     };
@@ -273,9 +274,10 @@ window.PixelOfficeP2P = (function () {
         id: e.id, name: e.name || e.user, github: g,
         avatar: e.avatar || "", url: e.url || "",
         ops: e.ops || 0, tools: e.tools || 0, sessions: e.sessions || 0,
-        time_s: e.time_s || 0, tier: e.tier || null, agents: [],
+        time_s: e.time_s || 0, tier: e.tier || null,
         bio: e.bio || "", links: e.links || {}, tierIcon: e.tierIcon || "",
         profileTheme: e.profileTheme || {}, interfaceTheme: e.interfaceTheme || {},
+        agents: e.agents || [],
       });
     });
     rows.sort(function (a, b) { return (b.ops - a.ops) || (b.tools - a.tools); });

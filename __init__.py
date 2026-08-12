@@ -979,6 +979,18 @@ def build_state() -> Dict[str, Any]:
 
     visible.sort(key=lambda a: (a["kind"] != "main", a.get("first_seen", 0)))
 
+    # Attach live agent status to each user's agent roster so profile popups
+    # show a brief, real-time list (also rides the P2P score packets).
+    scene = {a["id"]: a for a in agents.values()}
+    for r in rows:
+        for ag in r.get("agents", []):
+            a = scene.get(ag.get("id"))
+            if a:
+                ag["status"] = a.get("status", "")
+                ag["tool"] = a.get("tool", "")
+                ag["activity"] = a.get("activity", "")
+                ag["detail"] = a.get("detail", "")
+
     # Warm + expose the tier ladder to the frontend.
     _tier_for_ops(0)
     tiers = getattr(_tier_for_ops, "_cache", None) or []
@@ -1278,12 +1290,18 @@ def _serve() -> None:
                         json.dumps({"user": target, **prof}).encode("utf-8"),
                         "application/json")
                 elif path.startswith("/icons/"):
-                    fname = Path(path[len("/icons/"):]).name
-                    fp = web_root / "icons" / fname
-                    if fp.exists():
-                        self._send_bytes(fp.read_bytes(), "image/webp")
-                    else:
+                    rel = path[len("/icons/"):]
+                    # Allow one safe subdirectory (e.g. "large/...") but never
+                    # traversal or absolute paths.
+                    if not rel or rel.startswith("/") or "\\" in rel or ".." in rel:
                         self._send_bytes(b"not found", "text/plain", 404)
+                    else:
+                        fp = (web_root / "icons" / rel).resolve()
+                        base = (web_root / "icons").resolve()
+                        if str(fp).startswith(str(base)) and fp.is_file():
+                            self._send_bytes(fp.read_bytes(), "image/webp")
+                        else:
+                            self._send_bytes(b"not found", "text/plain", 404)
                 else:
                     self._send_bytes(b"not found", "text/plain", 404)
             except Exception:
