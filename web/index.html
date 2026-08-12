@@ -4,151 +4,235 @@
 <meta charset="utf-8">
 <title>Hermes Pixel Office</title>
 <style>
-  html,body{margin:0;height:100%;background:#1a1423;overflow:hidden;
-    font-family:ui-monospace,Menlo,Consolas,monospace}
+  :root{
+    --bg:#1a1423; --panel:#221a2e; --panel2:#241c30; --panelHover:#2a2138;
+    --border:#3a2f4b; --borderDim:#2c2340; --rowMe:#2a2438; --rowCurrent:#33291a;
+    --accent:#e8c170; --text:#cfc4e8; --sub:#7a6f8f; --green:#5fce7a;
+    --dev:#ffd700; --link:#7fa8d8; --linkHover:#a8c8e8; --danger:#d84f6f;
+    --scroll:#4a3f63; --time:#555;
+    --font:ui-monospace,Menlo,Consolas,monospace; --fs:12px;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
+    font-family:var(--font);font-size:var(--fs)}
   #wrap{display:flex;flex-direction:column;height:100%}
-  #hdr{color:#e8c170;padding:7px 14px;font-size:13px;letter-spacing:1px;
-    border-bottom:2px solid #3a2f4b;display:flex;justify-content:space-between;
+  #hdr{color:var(--accent);padding:7px 14px;font-size:1.083em;letter-spacing:1px;
+    border-bottom:2px solid var(--border);display:flex;justify-content:space-between;
     align-items:center;gap:10px;flex-wrap:wrap}
-  #hdr .dim{color:#7a6f8f}
-  #hdr .btn{cursor:pointer;color:#cfc4e8;border:1px solid #3a2f4b;
-    border-radius:3px;padding:2px 8px;font-size:12px;background:#241c30;
+  #hdr .dim{color:var(--sub)}
+  #hdr .btn{cursor:pointer;color:var(--text);border:1px solid var(--border);
+    border-radius:3px;padding:2px 8px;font-size:1em;background:var(--panel2);
     user-select:none}
-  #hdr .btn:hover{border-color:#e8c170;color:#e8c170}
-  #hdr .btn.on{color:#5fce7a;border-color:#5fce7a}
+  #hdr .btn:hover{border-color:var(--accent);color:var(--accent)}
+  #hdr .btn.on{color:var(--green);border-color:var(--green)}
   /* stats strip — sits left of the "N agents" count, same font */
-  #stats{display:flex;align-items:center;gap:12px;font-size:12px;
-    letter-spacing:0.5px;color:#cfc4e8;white-space:nowrap}
+  #stats{display:flex;align-items:center;gap:12px;font-size:1em;
+    letter-spacing:0.5px;color:var(--text);white-space:nowrap}
   #stats .st{display:flex;align-items:center;gap:4px}
-  #stats .st b{color:#e8c170;font-weight:bold}
+  #stats .st b{color:var(--accent);font-weight:bold}
   #stats .coin{width:12px;height:12px;image-rendering:pixelated;vertical-align:-2px}
-  #stats .sep{color:#3a2f4b}
+  #stats .sep{color:var(--border)}
   canvas{flex:1;image-rendering:pixelated;width:100%;height:100%}
   /* panels */
   #panel-holder{position:absolute;inset:0;pointer-events:none}
-  .panel{position:absolute;pointer-events:auto;background:#221a2e;border:2px solid #3a2f4b;
+  .panel{position:absolute;pointer-events:auto;background:var(--panel);border:2px solid var(--border);
     border-radius:4px;box-shadow:0 4px 20px rgba(0,0,0,.5);display:none;flex-direction:column;
-    font-size:12px;z-index:10}
+    font-size:1em;z-index:10}
   .panel.open{display:flex}
-  .panel .ptitle{color:#e8c170;padding:6px 10px;font-size:12px;letter-spacing:1px;
-    border-bottom:1px solid #3a2f4b;display:flex;justify-content:space-between;align-items:center}
-  .panel .pclose{cursor:pointer;color:#7a6f8f;padding:0 4px}
-  .panel .pclose:hover{color:#e8c170}
+  .panel .ptitle{color:var(--accent);padding:6px 10px;font-size:1em;letter-spacing:1px;
+    border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .panel .pclose{cursor:pointer;color:var(--sub);padding:0 4px}
+  .panel .pclose:hover{color:var(--accent)}
   /* leaderboard */
-  #lb{right:12px;top:12px;width:360px;max-height:78%;bottom:auto}
+  #lb{right:12px;top:12px;width:max-content;min-width:360px;max-width:94%;max-height:78%;bottom:auto}
   #lb-list{overflow-y:auto;flex:1;min-height:0}
   .lb-row{display:flex;align-items:center;gap:8px;padding:6px 10px;
-    border-bottom:1px solid #2c2340;cursor:pointer}
-  .lb-row:hover{background:#2a2138}
-  .lb-row.me{background:#2a2438}
-  .lb-rank{width:22px;color:#7a6f8f;font-weight:bold;flex-shrink:0}
-  .lb-rank.top{color:#e8c170}
+    border-bottom:1px solid var(--borderDim);cursor:pointer}
+  .lb-row:hover{background:var(--panelHover)}
+  .lb-row.me{background:var(--rowMe)}
+  .lb-rank{width:22px;color:var(--sub);font-weight:bold;flex-shrink:0}
+  .lb-rank.top{color:var(--accent)}
   .lb-tier{width:24px;height:24px;image-rendering:pixelated;flex-shrink:0;
-    border:1px solid #3a2f4b;border-radius:3px;background:#1a1423;object-fit:contain}
-  .lb-tiernum{width:30px;color:#7a6f8f;font-size:10px;flex-shrink:0;text-align:center}
-  .lb-row.me .lb-tiernum{color:#e8c170}
+    border:1px solid var(--border);border-radius:3px;background:var(--bg);object-fit:contain}
+  .lb-tiernum{width:30px;color:var(--sub);font-size:.833em;flex-shrink:0;text-align:center}
+  .lb-row.me .lb-tiernum{color:var(--accent)}
   .lb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    color:#cfc4e8}
-  .lb-name.dev{color:#ffd700}
-  .lb-dev{color:#ffd700;font-size:10px;border:1px solid #ffd70066;border-radius:3px;
+    color:var(--text)}
+  .lb-name.dev{color:var(--dev)}
+  .lb-dev{color:var(--dev);font-size:.833em;border:1px solid var(--dev);border-radius:3px;
     padding:0 4px;margin-left:4px;flex-shrink:0}
   .lb-ops{text-align:right;flex-shrink:0}
-  .lb-ops b{color:#e8c170}
-  .lb-ops .lbl{color:#7a6f8f;font-size:10px;display:block}
-  .lb-meta{color:#7a6f8f;font-size:10px;flex-shrink:0;text-align:right}
+  .lb-ops b{color:var(--accent)}
+  .lb-ops .lbl{color:var(--sub);font-size:.833em;display:block}
+  .lb-meta{color:var(--sub);font-size:.833em;flex-shrink:0;text-align:right}
   /* profile card */
-  #prof{left:50%;top:50%;transform:translate(-50%,-50%);width:340px;pointer-events:auto}
-  .pc-head{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid #3a2f4b}
-  .pc-av{width:48px;height:48px;image-rendering:pixelated;border:2px solid #3a2f4b;
-    border-radius:50%;object-fit:cover}
-  .pc-av.gh{background:#241c30}
+  #prof{left:50%;top:50%;transform:translate(-50%,-50%);width:360px;pointer-events:auto;
+    max-height:88%;overflow:auto}
+  .pc-head{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid var(--border)}
+  .pc-av{width:52px;height:52px;image-rendering:pixelated;border:2px solid var(--border);
+    border-radius:50%;object-fit:cover;flex-shrink:0}
+  .pc-av.gh{background:var(--panel2)}
+  .pc-tierbox{display:flex;flex-direction:column;align-items:center;gap:1px;flex-shrink:0;
+    padding:0 2px;border-right:1px solid var(--borderDim)}
   .pc-tiermax{width:44px;height:44px;image-rendering:pixelated;object-fit:contain}
-  .pc-name{font-size:14px;color:#e8c170}
-  .pc-name.dev{color:#ffd700}
-  .pc-sub{color:#7a6f8f;font-size:11px}
-  .pc-ghlink{display:inline-flex;align-items:center;gap:4px;color:#7fa8d8;
-    text-decoration:none;font-size:11px;margin-top:3px}
-  .pc-ghlink:hover{color:#a8c8e8;text-decoration:underline}
+  .pc-tiernum{color:var(--sub);font-size:.75em}
+  .pc-name{font-size:1.167em;color:var(--accent);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .pc-name.dev{color:var(--dev)}
+  .pc-devtitle{color:var(--dev);font-size:.75em;font-weight:bold;display:block}
+  .pc-sub{color:var(--sub);font-size:.917em}
+  .pc-bio{color:var(--text);font-size:.917em;padding:8px 12px;border-bottom:1px solid var(--borderDim);
+    white-space:pre-wrap;word-break:break-word}
+  .pc-links{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--borderDim)}
+  .pc-link{display:inline-flex;align-items:center;gap:6px;color:var(--text);background:var(--panel2);
+    border:1px solid var(--border);border-radius:3px;padding:3px 8px;text-decoration:none;font-size:.833em}
+  .pc-link:hover{border-color:var(--accent);color:var(--accent)}
+  .pc-link img{width:14px;height:14px;object-fit:contain}
+  .pc-ghlink{display:inline-flex;align-items:center;gap:4px;color:var(--link);
+    text-decoration:none;font-size:.917em;margin-top:3px}
+  .pc-ghlink:hover{color:var(--linkHover);text-decoration:underline}
   .pc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
-  .pc-stat{background:#1a1423;border:1px solid #2c2340;border-radius:3px;padding:6px 8px}
-  .pc-stat .lbl{color:#7a6f8f;font-size:10px;letter-spacing:1px}
-  .pc-stat .val{color:#cfc4e8;font-size:13px;font-weight:bold}
-  .pc-stat .val.gold{color:#e8c170}
-  .pc-agents{padding:6px 12px 12px;color:#7a6f8f;font-size:11px;border-top:1px solid #2c2340}
-  .pc-agents b{color:#cfc4e8}
+  .pc-stat{background:var(--bg);border:1px solid var(--borderDim);border-radius:3px;padding:6px 8px}
+  .pc-stat .lbl{color:var(--sub);font-size:.833em;letter-spacing:1px}
+  .pc-stat .val{color:var(--text);font-size:1.083em;font-weight:bold}
+  .pc-stat .val.gold{color:var(--accent)}
+  .pc-agents{padding:6px 12px 12px;color:var(--sub);font-size:.917em;border-top:1px solid var(--borderDim)}
+  .pc-agents b{color:var(--text)}
+  .pc-actions{padding:10px 12px;border-top:1px solid var(--borderDim);display:flex;gap:8px;justify-content:flex-end}
+  .pc-editbtn{cursor:pointer;background:var(--panel2);border:1px solid var(--border);color:var(--accent);
+    border-radius:3px;padding:5px 12px;font-family:inherit;font-size:.917em}
+  .pc-editbtn:hover{border-color:var(--accent)}
   /* chat */
   #chat{right:12px;bottom:12px;width:320px;height:300px}
   #chat-list{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
   .cmsg{display:flex;gap:6px;align-items:flex-start}
-  .cav{width:18px;height:18px;image-rendering:pixelated;border-radius:3px;flex-shrink:0}
-  .cav.gh{background:#241c30}
+  .ctierl{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:26px;margin-top:1px}
+  .ctierl img{width:24px;height:24px;image-rendering:pixelated;border-radius:3px;background:var(--bg);
+    object-fit:contain;border:1px solid var(--borderDim)}
+  .ctierl b{font-size:.67em;color:var(--sub);line-height:1;margin-top:1px}
+  .cav{width:18px;height:18px;image-rendering:pixelated;border-radius:3px;flex-shrink:0;margin-top:2px}
+  .cav.gh{background:var(--panel2)}
   .cbody{min-width:0}
-  .cuser{color:#e8c170;font-size:10px;display:flex;align-items:center;gap:4px}
-  .ctier{display:inline-flex;align-items:center;gap:3px;color:#7a6f8f;font-size:9px;margin-left:2px}
-  .ctier img{width:13px;height:13px;image-rendering:pixelated;border-radius:2px}
-  .ctier b{color:#e8c170;font-weight:bold}
+  .cuser{color:var(--accent);font-size:.833em;display:flex;align-items:center;gap:4px}
   .cuser a{color:inherit;text-decoration:none}
   .cuser a:hover{text-decoration:underline}
-  .ctext{color:#cfc4e8;font-size:11px;word-break:break-word;margin-top:1px}
-  .ctime{color:#555;font-size:9px}
-  #chat-input-row{display:flex;border-top:1px solid #3a2f4b}
-  #chat-input{flex:1;background:#1a1423;border:none;color:#cfc4e8;padding:8px 10px;
-    font-family:inherit;font-size:11px;outline:none}
-  #chat-send{background:#241c30;border:none;border-left:1px solid #3a2f4b;
-    color:#e8c170;cursor:pointer;padding:0 12px;font-family:inherit}
-  #chat-send:hover{background:#2a2138}
+  .ctext{color:var(--text);font-size:.917em;word-break:break-word;margin-top:1px}
+  .ctime{color:var(--time);font-size:.75em}
+  #chat-input-row{display:flex;border-top:1px solid var(--border)}
+  #chat-input{flex:1;background:var(--bg);border:none;color:var(--text);padding:8px 10px;
+    font-family:inherit;font-size:.917em;outline:none}
+  #chat-send{background:var(--panel2);border:none;border-left:1px solid var(--border);
+    color:var(--accent);cursor:pointer;padding:0 12px;font-family:inherit}
+  #chat-send:hover{background:var(--panelHover)}
   /* scrollable panels: thin, clean scrollbar that appears only on hover */
-  #lb-list,#tier-list,#chat-list{scrollbar-width:thin;scrollbar-color:transparent transparent}
-  #lb-list:hover,#tier-list:hover,#chat-list:hover{scrollbar-color:#4a3f63 transparent}
-  #lb-list::-webkit-scrollbar,#tier-list::-webkit-scrollbar,#chat-list::-webkit-scrollbar{width:8px}
-  #lb-list::-webkit-scrollbar-track,#tier-list::-webkit-scrollbar-track,#chat-list::-webkit-scrollbar-track{background:transparent}
-  #lb-list::-webkit-scrollbar-thumb,#tier-list::-webkit-scrollbar-thumb,#chat-list::-webkit-scrollbar-thumb{
-    background:transparent;border-radius:4px;border:2px solid transparent;background-clip:content-box}
-  #lb-list:hover::-webkit-scrollbar-thumb,#tier-list:hover::-webkit-scrollbar-thumb,#chat-list:hover::-webkit-scrollbar-thumb{
-    background:#4a3f63;border-radius:4px;border:2px solid transparent;background-clip:content-box}
-  #lb-list::-webkit-scrollbar-thumb:hover,#tier-list::-webkit-scrollbar-thumb:hover,#chat-list::-webkit-scrollbar-thumb:hover{
-    background:#5fce7a;border-radius:4px;border:2px solid transparent;background-clip:content-box}
+  #lb-list,#tier-list,#chat-list,#prof,#edit{scrollbar-width:thin;scrollbar-color:transparent transparent}
+  #lb-list:hover,#tier-list:hover,#chat-list:hover,#prof:hover,#edit:hover{scrollbar-color:var(--scroll) transparent}
+  #lb-list::-webkit-scrollbar,#tier-list::-webkit-scrollbar,#chat-list::-webkit-scrollbar,
+  #prof::-webkit-scrollbar,#edit::-webkit-scrollbar{width:8px}
+  #lb-list::-webkit-scrollbar-track,#tier-list::-webkit-scrollbar-track,#chat-list::-webkit-scrollbar-track,
+  #prof::-webkit-scrollbar-track,#edit::-webkit-scrollbar-track{background:transparent}
+  #lb-list::-webkit-scrollbar-thumb,#tier-list::-webkit-scrollbar-thumb,#chat-list::-webkit-scrollbar-thumb,
+  #prof::-webkit-scrollbar-thumb,#edit::-webkit-scrollbar-thumb{background:transparent;border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  #lb-list:hover::-webkit-scrollbar-thumb,#tier-list:hover::-webkit-scrollbar-thumb,
+  #chat-list:hover::-webkit-scrollbar-thumb,#prof:hover::-webkit-scrollbar-thumb,
+  #edit:hover::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  #lb-list::-webkit-scrollbar-thumb:hover,#tier-list::-webkit-scrollbar-thumb:hover,
+  #chat-list::-webkit-scrollbar-thumb:hover,#prof::-webkit-scrollbar-thumb:hover,
+  #edit::-webkit-scrollbar-thumb:hover{background:var(--green);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
   /* chat message sound toggle (same icon as the header sound toggle) */
-  #chat .ptitle .csnd{cursor:pointer;color:#7a6f8f;padding:0 4px;user-select:none;font-size:11px}
-  #chat .ptitle .csnd:hover{color:#e8c170}
-  #chat .ptitle .csnd.on{color:#5fce7a}
+  #chat .ptitle .csnd{cursor:pointer;color:var(--sub);padding:0 4px;user-select:none;font-size:.917em}
+  #chat .ptitle .csnd:hover{color:var(--accent)}
+  #chat .ptitle .csnd.on{color:var(--green)}
   /* tier ladder popover */
   #tiers{left:12px;top:12px;width:300px;max-height:70%}
   #tier-list{overflow-y:auto;flex:1;min-height:0}
   .tier-row{display:flex;align-items:center;gap:8px;padding:5px 10px;
-    border-bottom:1px solid #2c2340}
+    border-bottom:1px solid var(--borderDim)}
   .tier-row.locked{opacity:.45}
-  .tier-row.me{background:#2a2438}
-  .tier-row.me.current{background:#33291a;border-left:2px solid #e8c170}
-  .tier-row.me .tier-nm{color:#e8c170}
+  .tier-row.me{background:var(--rowMe)}
+  .tier-row.me.current{background:var(--rowCurrent);border-left:2px solid var(--accent)}
+  .tier-row.me .tier-nm{color:var(--accent)}
   .tier-ic{width:20px;height:20px;image-rendering:pixelated;flex-shrink:0;object-fit:contain}
-  .tier-rank{width:34px;color:#7a6f8f;font-weight:bold;flex-shrink:0;text-align:right}
-  .tier-row.me .tier-rank{color:#e8c170}
-  .tier-nm{flex:1;color:#cfc4e8;font-size:11px}
-  .tier-ops{color:#7a6f8f;font-size:10px;text-align:right}
-  .tier-ops b{color:#e8c170}
+  .tier-rank{width:34px;color:var(--sub);font-weight:bold;flex-shrink:0;text-align:right}
+  .tier-row.me .tier-rank{color:var(--accent)}
+  .tier-nm{flex:1;color:var(--text);font-size:.917em}
+  .tier-ops{color:var(--sub);font-size:.833em;text-align:right}
+  .tier-ops b{color:var(--accent)}
   /* connect modal */
   #gh-connect{left:50%;top:50%;transform:translate(-50%,-50%);width:320px}
   .gh-form{padding:12px;display:flex;flex-direction:column;gap:8px}
-  .gh-form input{background:#1a1423;border:1px solid #3a2f4b;color:#cfc4e8;
-    padding:7px 9px;font-family:inherit;font-size:12px;outline:none;border-radius:3px}
-  .gh-form input:focus{border-color:#e8c170}
-  .gh-form .hint{color:#7a6f8f;font-size:10px}
+  .gh-form input{background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:7px 9px;font-family:inherit;font-size:1em;outline:none;border-radius:3px}
+  .gh-form input:focus{border-color:var(--accent)}
+  .gh-form .hint{color:var(--sub);font-size:.833em}
   .gh-form .row{display:flex;gap:8px}
-  .gh-form button{background:#241c30;border:1px solid #3a2f4b;color:#cfc4e8;
-    padding:7px 10px;font-family:inherit;font-size:12px;cursor:pointer;border-radius:3px}
-  .gh-form button.primary{background:#3a2f1e;border-color:#e8c17055;color:#e8c170}
-  .gh-form button:hover{border-color:#e8c170;color:#e8c170}
-  #gh-status{font-size:11px;padding:0 12px 10px;color:#5fce7a}
-  #gh-status.err{color:#d84f6f}
+  .gh-form button{background:var(--panel2);border:1px solid var(--border);color:var(--text);
+    padding:7px 10px;font-family:inherit;font-size:1em;cursor:pointer;border-radius:3px}
+  .gh-form button.primary{background:var(--rowCurrent);border-color:var(--accent);color:var(--accent)}
+  .gh-form button:hover{border-color:var(--accent);color:var(--accent)}
+  #gh-status{font-size:.917em;padding:0 12px 10px;color:var(--green)}
+  #gh-status.err{color:var(--danger)}
   #gh-status .gh-u{display:flex;align-items:center;gap:6px}
   #gh-status img{width:20px;height:20px;image-rendering:pixelated;border-radius:50%}
   /* empty hint */
-  .pempty{color:#7a6f8f;padding:14px;text-align:center;font-size:11px}
-  #hdr .gh-chip{display:inline-flex;align-items:center;gap:5px;color:#7fa8d8;
-    font-size:11px;border:1px solid #3a2f4b;border-radius:3px;padding:1px 6px;cursor:pointer}
+  .pempty{color:var(--sub);padding:14px;text-align:center;font-size:.917em}
+  #hdr .gh-chip{display:inline-flex;align-items:center;gap:5px;color:var(--link);
+    font-size:.917em;border:1px solid var(--border);border-radius:3px;padding:1px 6px;cursor:pointer}
   #hdr .gh-chip img{width:14px;height:14px;image-rendering:pixelated;border-radius:50%}
-  #hdr .gh-chip.dev{color:#ffd700;border-color:#ffd70066}
+  #hdr .gh-chip.dev{color:var(--dev);border-color:var(--dev)}
+  /* profile edit panel */
+  #edit{left:50%;top:50%;transform:translate(-50%,-50%);width:470px;max-height:88%;
+    pointer-events:auto}
+  #edit .ed-scroll{overflow-y:auto;flex:1;min-height:0}
+  .ed-section{border-bottom:1px solid var(--borderDim);padding:10px 12px}
+  .ed-section h4{color:var(--accent);font-size:.917em;letter-spacing:1px;margin:0 0 8px}
+  .ed-label{color:var(--sub);font-size:.75em;letter-spacing:1px;margin:6px 0 3px;display:block}
+  .ed-input{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);padding:7px 9px;font-family:inherit;font-size:.917em;outline:none;border-radius:3px;margin-top:2px}
+  .ed-input:focus{border-color:var(--accent)}
+  textarea.ed-input{resize:vertical;min-height:52px}
+  .ed-links{display:flex;flex-direction:column;gap:6px}
+  .ed-linkrow{display:flex;gap:6px;align-items:center}
+  .ed-linkrow img{width:16px;height:16px;flex-shrink:0;object-fit:contain}
+  .ed-linkrow input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:6px 8px;font-family:inherit;font-size:.833em;outline:none;border-radius:3px}
+  .ed-linkrow input:focus{border-color:var(--accent)}
+  .ed-del{cursor:pointer;background:var(--panel2);border:1px solid var(--border);color:var(--danger);
+    border-radius:3px;width:24px;height:24px;flex-shrink:0;font-family:inherit}
+  .ed-add{cursor:pointer;background:var(--panel2);border:1px solid var(--border);color:var(--accent);
+    border-radius:3px;padding:4px 10px;font-family:inherit;font-size:.833em;margin-top:4px}
+  .ed-add:hover{border-color:var(--accent)}
+  .ed-tierpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:4px;
+    max-height:150px;overflow-y:auto;padding:4px;border:1px solid var(--borderDim);border-radius:3px;background:var(--bg)}
+  .ed-tierpick img{width:30px;height:30px;image-rendering:pixelated;object-fit:contain;cursor:pointer;
+    border:1px solid var(--borderDim);border-radius:3px;padding:2px;background:var(--panel)}
+  .ed-tierpick img.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .ed-theme-row{display:flex;align-items:center;gap:8px;margin:5px 0}
+  .ed-theme-row label{flex:1;color:var(--text);font-size:.833em}
+  .ed-theme-row input[type=color]{width:34px;height:24px;border:1px solid var(--border);border-radius:3px;
+    background:var(--panel2);cursor:pointer;padding:0}
+  .ed-theme-row input[type=number]{width:64px;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);padding:4px 6px;font-family:inherit;font-size:.833em;border-radius:3px}
+  .ed-theme-row .ed-input{width:auto;flex:1}
+  .ed-save{display:block;width:100%;cursor:pointer;background:var(--accent);color:#000;border:none;
+    border-radius:3px;padding:9px;font-family:inherit;font-size:1em;font-weight:bold;margin-top:10px}
+  .ed-save:hover{filter:brightness(1.1)}
+  .ed-status{color:var(--green);font-size:.833em;padding:6px 12px;display:none}
+  /* about / credits */
+  #about{left:50%;top:50%;transform:translate(-50%,-50%);width:440px;max-height:86%;pointer-events:auto}
+  #about .ab-scroll{overflow-y:auto;flex:1;min-height:0;padding:4px 14px 14px}
+  .ab-block{padding:12px 0;border-bottom:1px solid var(--borderDim)}
+  .ab-block:last-child{border-bottom:none}
+  .ab-kicker{color:var(--accent);font-size:.75em;letter-spacing:1px;margin-bottom:6px}
+  .ab-block p{color:var(--text);font-size:.917em;line-height:1.5;margin:0 0 8px}
+  .ab-block p b{color:var(--accent)}
+  .ab-links{display:flex;flex-wrap:wrap;gap:6px}
+  .ab-link{display:inline-flex;align-items:center;gap:6px;color:var(--link);background:var(--panel2);
+    border:1px solid var(--border);border-radius:3px;padding:4px 8px;text-decoration:none;font-size:.833em}
+  .ab-link:hover{border-color:var(--accent);color:var(--accent)}
+  .ab-link img{width:14px;height:14px;object-fit:contain}
+
 </style>
 </head>
 <body>
@@ -171,6 +255,7 @@
     <span class="btn" id="tiersBtn" title="tier ladder">Tiers</span>
     <span class="btn" id="lbBtn" title="leaderboard">Leaderboard</span>
     <span class="btn" id="chatBtn" title="office chat">Chat</span>
+    <span class="btn" id="aboutBtn" title="about & credits">About</span>
     <span class="btn" id="sound" title="chime when an agent needs approval or a subagent finishes">♪ sound off</span>
     <span class="btn" id="spawn" style="display:none" title="open a terminal running hermes">+ agent</span>
   </div>
@@ -184,13 +269,32 @@
         <div id="chat-input-row"><input id="chat-input" placeholder="say something to the office…" autocomplete="off"><button id="chat-send">▶</button></div>
       </div>
       <div class="panel" id="prof"></div>
+      <div class="panel" id="edit"></div>
+      <div class="panel" id="about">
+        <div class="ptitle"><span>ABOUT / CREDITS</span><span class="pclose" data-close="about">✕</span></div>
+        <div class="ab-scroll">
+          <div class="ab-block">
+            <div class="ab-kicker">ORIGINAL PLUGIN</div>
+            <p>Hermes Pixel Office was originally created by <b>Teknium</b> — a pixel-art virtual office that turns every Hermes agent into an animated character at a desk. This fork, <b>Hermes Pixel Office Enhanced</b>, builds on that clean foundation and takes it further.</p>
+            <div class="ab-links"><a class="ab-link" href="https://github.com/teknium1/hermes-pixel-office" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> teknium1/hermes-pixel-office</a></div>
+          </div>
+          <div class="ab-block">
+            <div class="ab-kicker">THE ENHANCEMENT — BY DRGEKOZ</div>
+            <p>I'm <b>DrGekoz</b>. I made <b>Hermes IdleViber</b>, a cozy pixel idle game. When the office came along, I started adapting the bits of IdleViber I love most — its tier ladder, all 500 pixel icons, and its peer-to-peer mesh — into the plugin. So the office became a place you can actually live in: a GitHub leaderboard, a 500-rung tier ladder, office chat, and custom profiles and themes, all shared with friends over P2P.</p>
+            <div class="ab-links">
+              <a class="ab-link" href="https://hermes-idleviber.netlify.app" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/itchdotio/FA5C5C" alt="" onerror="this.style.display='none'"> Play Hermes IdleViber</a>
+              <a class="ab-link" href="https://github.com/DrGekoz/Hermes-IdleViber" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> DrGekoz/Hermes-IdleViber</a>
+              <a class="ab-link" href="https://github.com/DrGekoz" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> github.com/DrGekoz</a>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="panel" id="gh-connect">
         <div class="ptitle"><span>CONNECT GITHUB</span><span class="pclose" data-close="gh-connect">✕</span></div>
         <div class="gh-form">
           <button class="primary" id="gh-login" style="padding:9px 10px">⇪ Log in with GitHub</button>
-          <div class="hint">Logs in with the GitHub account this machine is authenticated as, so your real username shows on the leaderboard. Logging in is what lets your scores and chat reach other users over P2P.</div>
-          <div class="row"><input id="gh-input" placeholder="or enter a github username" autocomplete="off"></div>
-          <div class="row"><button id="gh-save">Use name</button><button id="gh-clear">Disconnect</button></div>
+          <div class="hint">Logs in with the GitHub account this machine is authenticated as, so your real username + avatar show on the leaderboard. Logging in is what lets your scores and chat reach other users over P2P.</div>
+          <div class="row"><button id="gh-profile" style="flex:1">✎ Edit Profile</button><button id="gh-clear">Disconnect</button></div>
         </div>
         <div id="gh-status"></div>
       </div>
@@ -227,6 +331,54 @@ function iconPath(name){return "icons/"+(name||"001_Wood_Heraldic_Shield_orig462
 function timeStr(ts){const d=new Date(ts*1000);return d.toTimeString().slice(0,5)}
 function isDev(g){return /^drgekoz$/i.test(g||"")}
 function isMe(id){return state&&state.identity&&(id===state.identity.github||id===state.identity.name)}
+
+// ── link platforms + interface theming ────────────────────────────────
+const LINK_PLATFORMS=[
+  {key:"youtube",name:"YouTube",color:"FF0000",slug:"youtube"},
+  {key:"spotify",name:"Spotify",color:"1DB954",slug:"spotify"},
+  {key:"soundcloud",name:"SoundCloud",color:"FF5500",slug:"soundcloud"},
+  {key:"github",name:"GitHub",color:"181717",slug:"github"},
+  {key:"discord",name:"Discord",color:"5865F2",slug:"discord"},
+  {key:"steam",name:"Steam",color:"000000",slug:"steam"}
+];
+function linkIcon(key){const p=LINK_PLATFORMS.find(x=>x.key===key);return p?"https://cdn.simpleicons.org/"+p.slug+"/"+p.color:"";}
+function linkName(key){const p=LINK_PLATFORMS.find(x=>x.key===key);return p?p.name:key;}
+
+const THEME_DEFAULTS={bg:"#1a1423",panel:"#221a2e",panel2:"#241c30",panelHover:"#2a2138",
+  border:"#3a2f4b",borderDim:"#2c2340",rowMe:"#2a2438",rowCurrent:"#33291a",
+  accent:"#e8c170",text:"#cfc4e8",sub:"#7a6f8f",green:"#5fce7a",dev:"#ffd700",
+  link:"#7fa8d8",linkHover:"#a8c8e8",danger:"#d84f6f",scroll:"#4a3f63",time:"#555",
+  font:"ui-monospace,Menlo,Consolas,monospace",fontSize:12};
+const CSS_VAR_MAP={bg:"--bg",panel:"--panel",panel2:"--panel2",panelHover:"--panelHover",
+  border:"--border",borderDim:"--borderDim",rowMe:"--rowMe",rowCurrent:"--rowCurrent",
+  accent:"--accent",text:"--text",sub:"--sub",green:"--green",dev:"--dev",
+  link:"--link",linkHover:"--linkHover",danger:"--danger",scroll:"--scroll",time:"--time",
+  font:"--font",fontSize:"--fs"};
+function applyInterfaceTheme(theme){
+  theme=theme||{};
+  const root=document.documentElement.style;
+  for(const k in CSS_VAR_MAP){
+    let v=(theme[k]!=null)?theme[k]:THEME_DEFAULTS[k];
+    if(k==="fontSize")v=String(v)+"px";
+    root.setProperty(CSS_VAR_MAP[k],String(v));
+  }
+}
+function ghAvatarFor(rowOrUser){
+  if(rowOrUser&&typeof rowOrUser==="object"){
+    if(rowOrUser.avatar)return rowOrUser.avatar;
+    if(rowOrUser.github)return "https://github.com/"+encodeURIComponent(rowOrUser.github)+".png";
+  }
+  const g=rowOrUser||"";return g?"https://github.com/"+encodeURIComponent(g)+".png":"";
+}
+function rowTierIcon(r){
+  if(r&&r.tierIcon)return r.tierIcon;
+  const t=(r&&r.tier)||(r?tierForOps(r.ops):null);
+  return t&&t.icon?t.icon:"";
+}
+function myGitHub(){return (state&&state.identity&&state.identity.github)?state.identity.github:"";}
+function isMine(r){const g=myGitHub();return !!g&&String(r&&r.github||"").toLowerCase()===g.toLowerCase();}
+// apply a locally-saved interface theme (persists across reloads, pre-server)
+try{const lt=localStorage.getItem("pixelOfficeTheme");if(lt){const t=JSON.parse(lt);if(t&&typeof t==="object")applyInterfaceTheme(t);}}catch(e){}
 
 // ── office scene ────────────────────────────────────────────────────────
 function drawOffice(w,h){
@@ -398,16 +550,18 @@ document.querySelectorAll(".pclose").forEach(b=>b.onclick=()=>togglePanel(b.data
 document.getElementById("lbBtn").onclick=()=>togglePanel("lb");
 document.getElementById("chatBtn").onclick=()=>togglePanel("chat");
 document.getElementById("tiersBtn").onclick=()=>togglePanel("tiers");
+document.getElementById("aboutBtn").onclick=()=>togglePanel("about");
 document.getElementById("gh-chip").onclick=()=>togglePanel("gh-connect");
 
 // ── leaderboard ────────────────────────────────────────────────────────
 function tierRowHtml(r){
   const dev=isDev(r.github), me=isMe(r.id);
-  const tier=r.tier||{name:"—",icon:""};
+  const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops)||{name:"—",icon:"",t:1});
+  const tIcon=rowTierIcon(r)||tier.icon||"";
   return '<div class="lb-row'+(me?" me":"")+'" data-id="'+esc(r.id)+'">'+
     '<span class="lb-rank'+(r.rank<=3?" top":"")+'">'+r.rank+'</span>'+
     '<span class="lb-tiernum">#'+esc(tier.t||"")+'</span>'+
-    '<img class="lb-tier" src="'+iconPath(tier.icon)+'" alt="" onerror="this.style.visibility=\'hidden\'">'+
+    '<img class="lb-tier" src="'+iconPath(tIcon)+'" alt="" onerror="this.style.visibility=\'hidden\'">'+
     '<span class="lb-name'+(dev?" dev":"")+'">'+esc(r.name)+
       (dev?'<span class="lb-dev">DEV</span>':'')+'</span>'+
     '<span class="lb-meta">'+fmtNum(r.tools)+' calls<br>'+fmtTime(r.time_s)+'</span>'+
@@ -457,29 +611,182 @@ function showProfile(id){
   const board=mergeBoards(currentBoard(),loadCachedBoard());
   const r=board.find(x=>x.id===id||x.github===id);
   if(!r)return;
-  const dev=isDev(r.github);
-  const tier=r.tier||{name:"—",icon:""};
+  const dev=isDev(r.github), mine=isMine(r);
+  const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops)||{name:"—",icon:"",t:1});
+  const tierIcon=rowTierIcon(r)||tier.icon||"";
+  const avatar=ghAvatarFor(r);
+  const theme=r.profileTheme||{};
+  const accent=(theme.color||theme.accent||"#e8c170");
+  const nameColor=dev?"var(--dev)":accent;
+  const links=r.links||{};
+  const bio=(r.bio||"").trim();
   const agents=(r.agents||[]).map(a=>esc(a.label)).join(" · ")||"—";
-  const ghLink=r.url||(r.github?"https://github.com/"+esc(r.github):"");
+  let linksHtml="";
+  LINK_PLATFORMS.forEach(p=>{
+    (links[p.key]||[]).filter(Boolean).forEach(u=>{
+      linksHtml+='<a class="pc-link" href="'+esc(u)+'" target="_blank" rel="noopener">'+
+        '<img src="'+linkIcon(p.key)+'" alt="" onerror="this.style.display=\'none\'">'+esc(p.name)+'</a>';
+    });
+  });
   document.getElementById("prof").innerHTML=
-    '<div class="ptitle"><span>AGENT · '+r.rank+'</span><span class="pclose" data-close="prof">✕</span></div>'+
+    '<div class="ptitle"><span>PROFILE · '+r.rank+'</span><span class="pclose" data-close="prof">✕</span></div>'+
     '<div class="pc-head">'+
-      (r.avatar?'<img class="pc-av" src="'+esc(r.avatar)+'" alt="">':'<div class="pc-av gh"></div>')+
-      '<img class="pc-tiermax" src="'+iconPath(tier.icon)+'" alt="" onerror="this.style.display=\'none\'">'+
-      '<div><div class="pc-name'+(dev?" dev":"")+'">'+esc(r.name)+
-        (dev?' <span class="lb-dev">DEV</span>':'')+'</div>'+
-      '<div class="pc-sub">'+esc(tier.name)+' · Tier '+tier.t+'</div>'+
-      (ghLink?'<a class="pc-ghlink" href="'+esc(ghLink)+'" target="_blank" rel="noopener">🐙 '+esc(r.github||"GitHub")+' ↗</a>':'')+
+      (avatar?'<img class="pc-av" src="'+esc(avatar)+'" alt="" onerror="this.style.display=\'none\'">':'<div class="pc-av gh"></div>')+
+      '<div class="pc-tierbox"><img class="pc-tiermax" src="'+iconPath(tierIcon)+'" alt="" onerror="this.style.display=\'none\'">'+
+        '<span class="pc-tiernum">#'+(tier.t||"")+'</span></div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div class="pc-name'+(dev?" dev":"")+'" style="color:'+nameColor+'">'+esc(r.name)+
+          (dev?' <span class="lb-dev">DEV</span>':'')+'</div>'+
+        (dev?'<div class="pc-devtitle">Multiplayer Fork Developer</div>':'')+
+        '<div class="pc-sub">'+esc(tier.name||"")+' · Tier '+(tier.t||"")+'</div>'+
+        '<a class="pc-ghlink" href="https://github.com/'+esc(r.github)+'" target="_blank" rel="noopener">🐙 '+esc(r.github||"GitHub")+' ↗</a>'+
       '</div></div>'+
+    (bio?'<div class="pc-bio">'+esc(bio)+'</div>':'')+
+    (linksHtml?'<div class="pc-links">'+linksHtml+'</div>':'')+
     '<div class="pc-stats">'+
       '<div class="pc-stat"><div class="lbl">OPS</div><div class="val gold">'+fmtNum(r.ops)+'</div></div>'+
       '<div class="pc-stat"><div class="lbl">TOOL CALLS</div><div class="val">'+fmtNum(r.tools)+'</div></div>'+
       '<div class="pc-stat"><div class="lbl">SESSIONS</div><div class="val">'+fmtNum(r.sessions)+'</div></div>'+
       '<div class="pc-stat"><div class="lbl">TIME RAN</div><div class="val">'+fmtTime(r.time_s)+'</div></div>'+
       '</div>'+
+    (mine?'<div class="pc-actions"><button class="pc-editbtn" id="edit-profile-btn">✎ Edit Profile</button></div>':'')+
     '<div class="pc-agents"><b>AGENTS:</b> '+agents+'</div>';
   document.getElementById("prof").querySelector(".pclose").onclick=()=>togglePanel("prof",false);
+  const eb=document.getElementById("edit-profile-btn");
+  if(eb)eb.onclick=()=>{togglePanel("prof",false);openEditProfile(r);};
   togglePanel("prof",true);
+}
+
+// ── profile editing ───────────────────────────────────────────────────
+function linkRowHtml(p, val){
+  return '<div class="ed-linkrow"><img src="'+linkIcon(p.key)+'" alt="" onerror="this.style.display=\'none\'">'+
+    '<input data-platform="'+p.key+'" type="url" placeholder="https://..." value="'+esc(val||"")+'">'+
+    '<button class="ed-del" data-del="'+p.key+'" title="remove">✕</button></div>';
+}
+function openEditProfile(r){
+  const mine=myGitHub();
+  if(!mine)return;
+  const links=r.links||{};
+  let editBio=r.bio||"";
+  let editTier=r.tierIcon||"";
+  let editProf=Object.assign({},r.profileTheme||{});
+  let editIface=Object.assign({},THEME_DEFAULTS,r.interfaceTheme||{});
+
+  let linksHtml="";
+  LINK_PLATFORMS.forEach(p=>{
+    const arr=links[p.key]||[];
+    let rows="";
+    arr.forEach(u=>rows+=linkRowHtml(p,u));
+    linksHtml+='<div class="ed-section"><h4>'+esc(p.name)+'</h4>'+
+      '<div class="ed-links" id="ed-links-'+p.key+'">'+rows+'</div>'+
+      '<button class="ed-add" data-add="'+p.key+'">+ Add '+esc(p.name)+'</button></div>';
+  });
+
+  const themeItems=[["bg","Background"],["panel","Panel BG"],["panel2","Button BG"],["panelHover","Hover BG"],
+    ["border","Border"],["borderDim","Row Border"],["accent","Highlight"],["text","Font Color"],
+    ["sub","Sub-fonts"],["green","Status Green"],["dev","DEV Gold"],["link","Link Color"],
+    ["linkHover","Link Hover"],["danger","Error Red"],["scroll","Scrollbar"],
+    ["rowMe","Your Row"],["rowCurrent","Current Rung"]];
+  let themeHtml=themeItems.map(([k,label])=>
+    '<div class="ed-theme-row"><label>'+label+'</label>'+
+    '<input type="color" data-theme="'+k+'" value="'+esc(editIface[k]||THEME_DEFAULTS[k])+'"></div>'
+  ).join("");
+  themeHtml+='<div class="ed-theme-row"><label>Font size (px)</label>'+
+    '<input type="number" data-theme="fontSize" min="8" max="30" value="'+(editIface.fontSize||THEME_DEFAULTS.fontSize)+'"></div>';
+  themeHtml+='<div class="ed-theme-row"><label>Font family</label>'+
+    '<input class="ed-input" data-theme="font" value="'+esc(editIface.font||THEME_DEFAULTS.font)+'"></div>';
+
+  const avatar=ghAvatarFor(mine);
+  const el=document.getElementById("edit");
+  el.innerHTML=
+    '<div class="ptitle"><span>EDIT PROFILE — '+esc(mine)+'</span><span class="pclose" data-close="edit">✕</span></div>'+
+    '<div class="ed-scroll">'+
+      '<div class="ed-section">'+
+        '<span class="ed-label">GITHUB AVATAR (from GitHub)</span>'+
+        (avatar?'<img src="'+esc(avatar)+'" alt="" onerror="this.style.display=\'none\'" style="width:56px;height:56px;border-radius:50%;image-rendering:pixelated;border:2px solid var(--border);display:block">':'')+
+        '<span class="ed-label">BIO</span>'+
+        '<textarea class="ed-input" id="ed-bio" placeholder="Say something about yourself..."></textarea>'+
+      '</div>'+
+      '<div class="ed-section">'+
+        '<span class="ed-label">TIER ICON (shown on your profile / leaderboard / chat)</span>'+
+        '<div class="ed-tierpick" id="ed-tierpick"></div>'+
+      '</div>'+
+      '<div class="ed-section">'+linksHtml+'</div>'+
+      '<div class="ed-section">'+
+        '<h4>Profile Theme</h4>'+
+        '<div class="ed-theme-row"><label>Profile accent color</label><input type="color" id="ed-proftheme" value="'+esc(editProf.color||"#e8c170")+'"></div>'+
+      '</div>'+
+      '<div class="ed-section">'+
+        '<h4>Interface Theme</h4>'+
+        '<div id="ed-themelist">'+themeHtml+'</div>'+
+      '</div>'+
+      '<div class="ed-section" style="border:none">'+
+        '<button class="ed-save" id="ed-save">Save Profile</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="ed-status" id="ed-status"></div>';
+  document.getElementById("ed-bio").value=editBio;
+
+  const pick=document.getElementById("ed-tierpick");
+  (window.OFFICE_TIERS||[]).forEach(t=>{
+    const im=document.createElement("img");
+    im.src=iconPath(t.icon);
+    im.title=t.name+" (#"+t.t+")";
+    im.onerror=()=>{im.style.display="none";};
+    if(t.icon===editTier)im.className="sel";
+    im.onclick=()=>{editTier=t.icon;pick.querySelectorAll("img").forEach(x=>x.classList.remove("sel"));im.classList.add("sel");};
+    pick.appendChild(im);
+  });
+
+  function collectLinks(){
+    const out={};
+    document.querySelectorAll("#edit .ed-links").forEach(box=>{
+      const key=box.id.replace("ed-links-","");
+      out[key]=[...box.querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+    });
+    return out;
+  }
+  function wireRow(row){
+    const del=row.querySelector(".ed-del");
+    if(del)del.onclick=()=>row.remove();
+  }
+  document.querySelectorAll("#edit .ed-linkrow").forEach(wireRow);
+  document.querySelectorAll("#edit .ed-add").forEach(b=>{
+    b.onclick=()=>{
+      const p=LINK_PLATFORMS.find(x=>x.key===b.dataset.add);
+      const box=document.getElementById("ed-links-"+p.key);
+      box.insertAdjacentHTML("beforeend",linkRowHtml(p,""));
+      wireRow(box.lastElementChild);
+    };
+  });
+
+  document.getElementById("ed-proftheme").oninput=e=>{editProf.color=e.target.value;};
+  document.querySelectorAll("#edit [data-theme]").forEach(inp=>{
+    inp.oninput=()=>{
+      const k=inp.dataset.theme;
+      editIface[k]=(k==="fontSize")?parseInt(inp.value||THEME_DEFAULTS.fontSize):inp.value;
+      applyInterfaceTheme(editIface);
+    };
+  });
+
+  const status=document.getElementById("ed-status");
+  document.getElementById("ed-save").onclick=()=>{
+    editBio=document.getElementById("ed-bio").value;
+    const payload={bio:editBio,links:collectLinks(),tierIcon:editTier,profileTheme:editProf,interfaceTheme:editIface};
+    // persist the interface theme locally so it survives reloads even before
+    // the server is restarted, and so it's not lost if save/state fails.
+    try{localStorage.setItem("pixelOfficeTheme",JSON.stringify(editIface));}catch(e){}
+    status.style.color="var(--green)";
+    fetch("profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+      .then(r=>r.json()).then(()=>{
+        status.style.display="block";status.textContent="Saved ✓ — rebroadcasting…";
+        setTimeout(()=>{status.style.display="none";},2200);
+        pollNow();
+      })
+      .catch(()=>{status.style.display="block";status.style.color="var(--danger)";status.textContent="Save failed (theme kept locally)";});
+  };
+  el.querySelector(".pclose").onclick=()=>togglePanel("edit",false);
+  togglePanel("edit",true);
 }
 
 // ── tier ladder ────────────────────────────────────────────────────────
@@ -554,17 +861,19 @@ function saveCachedChat(msgs){ try{localStorage.setItem(LS_CHAT,JSON.stringify(m
 function chatMsgHtml(m){
   const gh=isDev(m.github);
   const ts=m.ts||m.t||Date.now();
-  const tier=(m.tier&&m.tier.icon)
-    ? '<span class="ctier"><img src="'+iconPath(m.tier.icon)+'" alt="" onerror="this.style.display=\'none\'"> <b>#'+esc(m.tier.t||"")+'</b></span>'
+  const tIcon=m.tierIcon||(m.tier&&m.tier.icon)||"";
+  const tierNo=(m.tier&&m.tier.t)||"";
+  const tier=(tIcon)
+    ? '<span class="ctierl"><img src="'+iconPath(tIcon)+'" alt="" onerror="this.style.display=\'none\'"><b>#'+esc(tierNo)+'</b></span>'
     : '';
   return '<div class="cmsg">'+
+    tier+
     (m.avatar?'<img class="cav" src="'+esc(m.avatar)+'" alt="">':'<div class="cav gh"></div>')+
     '<div class="cbody"><div class="cuser">'+
     (m.url?'<a href="'+esc(m.url)+'" target="_blank" rel="noopener">':"")+
     '<span style="color:'+(gh?"#ffd700":"#e8c170")+'">'+esc(m.user||"guest")+'</span>'+
     (gh?' <span style="font-size:8px;color:#ffd700;border:1px solid #ffd70066;border-radius:2px;padding:0 3px">DEV</span>':'')+
     (m.url?'</a>':"")+
-    tier+
     ' <span class="ctime">'+timeStr(ts/1000)+'</span></div>'+
     '<div class="ctext">'+esc(m.text)+'</div></div></div>';
 }
@@ -582,15 +891,19 @@ function renderChat(){
   // else look it up from the merged leaderboard so cached/older messages still
   // show the right tier badge.
   const board=mergeBoards(currentBoard(),loadCachedBoard());
-  const tierBy=new Map();
+  const rowBy=new Map();
   board.forEach(r=>{
-    if(r.github)tierBy.set(String(r.github).toLowerCase(), r.tier);
-    tierBy.set(String(r.name).toLowerCase(), r.tier);
+    if(r.github)rowBy.set(String(r.github).toLowerCase(), r);
+    rowBy.set(String(r.name).toLowerCase(), r);
   });
   msgs.forEach(m=>{
-    if(!m.tier){
+    if(!m.tier||!m.tierIcon){
       const k=String(m.github||m.user||"").toLowerCase();
-      m.tier=tierBy.get(k)||null;
+      const row=rowBy.get(k);
+      if(row){
+        if(!m.tier)m.tier=row.tier||tierForOps(row.ops);
+        if(!m.tierIcon)m.tierIcon=rowTierIcon(row);
+      }
     }
   });
   el.innerHTML=msgs.map(chatMsgHtml).join("");
@@ -628,19 +941,26 @@ function renderIdentity(){
     st.className="";st.textContent="not connected — agents show as their session label.";
   }
 }
-document.getElementById("gh-save").onclick=()=>{
-  const u=document.getElementById("gh-input").value.trim();
-  if(!u)return;
-  fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({github:u})})
-    .then(r=>r.json()).then(()=>{document.getElementById("gh-input").value="";pollNow()})
-    .catch(()=>{document.getElementById("gh-status").className="err";
-      document.getElementById("gh-status").textContent="connect failed";});
+document.getElementById("gh-profile").onclick=()=>{
+  if(!myGitHub()){
+    const st=document.getElementById("gh-status");
+    st.className="err";st.textContent="connect a GitHub identity first (log in or pick a username).";
+    return;
+  }
+  // build/edit the current user's profile from the board (or a fresh row)
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  let row=board.find(r=>r.github&&r.github.toLowerCase()===myGitHub().toLowerCase());
+  if(!row)row={id:myGitHub(),name:myGitHub(),github:myGitHub(),avatar:"",
+    url:"https://github.com/"+myGitHub(),ops:0,tools:0,sessions:0,time_s:0,tier:null,
+    agents:[],bio:"",links:{github:[myGitHub()?"https://github.com/"+myGitHub():""]},
+    tierIcon:"",profileTheme:{},interfaceTheme:{}};
+  togglePanel("gh-connect",false);
+  openEditProfile(row);
 };
 document.getElementById("gh-clear").onclick=()=>{
   fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({github:""})})
-    .then(()=>{document.getElementById("gh-input").value="";pollNow()}).catch(()=>{});
+    .then(()=>pollNow()).catch(()=>{});
 };
 document.getElementById("gh-login").onclick=()=>{
   const st=document.getElementById("gh-status");
@@ -648,10 +968,10 @@ document.getElementById("gh-login").onclick=()=>{
   fetch("auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
     .then(r=>r.json()).then(d=>{
       if(d.logged_in){
-        document.getElementById("gh-input").value="";pollNow();
+        pollNow();
       }else{
         st.className="err";
-        st.textContent="no GitHub login available on this machine — try 'Use name' or run `gh auth login`.";
+        st.textContent="no GitHub login available on this machine — run `gh auth login`.";
       }
     })
     .catch(()=>{st.className="err";st.textContent="login failed";});
@@ -737,6 +1057,17 @@ function applyState(st){
   document.getElementById("st-tools").textContent=fmtNum(gs.tools||0);
   document.getElementById("st-sess").textContent=fmtNum(gs.sessions||0);
   document.getElementById("st-time").textContent=fmtTime(gs.time_ms?gs.time_ms/1000:0);
+  // Apply the local viewer's interface theme from their own leaderboard row.
+  // If the server row carries no theme yet (e.g. server not restarted), keep
+  // whatever is currently applied (default or the locally-saved theme).
+  let myRow=null;
+  if(state&&state.identity&&state.identity.github){
+    myRow=(st.leaderboard||[]).find(r=>r.github&&
+      String(r.github).toLowerCase()===String(state.identity.github).toLowerCase());
+  }
+  if(myRow && myRow.interfaceTheme && Object.keys(myRow.interfaceTheme).length){
+    applyInterfaceTheme(myRow.interfaceTheme);
+  }
   syncP2P();
   renderIdentity();
   renderLeaderboard();

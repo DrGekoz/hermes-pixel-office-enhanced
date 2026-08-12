@@ -833,6 +833,18 @@ def _fold_leaderboard(events: List[Dict[str, Any]], registry: Dict[str, Dict[str
     for rank, r in enumerate(rows, 1):
         r["rank"] = rank
 
+    # Attach each user's profile (bio, links, chosen tier icon, themes) so the
+    # frontend + P2P score packets can render full profiles.
+    profiles = _load_profiles()
+    for r in rows:
+        p = profiles.get(str(r.get("github") or "").lower())
+        if p:
+            r["bio"] = p.get("bio", "")
+            r["links"] = p.get("links", {})
+            r["tierIcon"] = p.get("tierIcon", "")
+            r["profileTheme"] = p.get("profileTheme", {})
+            r["interfaceTheme"] = p.get("interfaceTheme", {})
+
     # Global totals (whole office).
     g_ops = sum(r["ops"] for r in rows)
     g_tools = sum(r["tools"] for r in rows)
@@ -1041,6 +1053,64 @@ def set_identity(github: str) -> Dict[str, Any]:
     return ident
 
 
+# ---------------------------------------------------------------------------
+# User profiles (bio, links, chosen tier icon, profile/interface themes).
+# Persisted per GitHub username in profiles.json.
+# ---------------------------------------------------------------------------
+def _profiles_path() -> Path:
+    return _office_dir() / "profiles.json"
+
+
+def _load_profiles() -> Dict[str, Dict[str, Any]]:
+    try:
+        return json.loads(_profiles_path().read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_profiles(profiles: Dict[str, Dict[str, Any]]) -> None:
+    try:
+        _profiles_path().write_text(
+            json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def get_profile(user: str) -> Dict[str, Any]:
+    if not user:
+        return {}
+    return _load_profiles().get(str(user).strip().lstrip("@").lower(), {})
+
+
+def set_profile(user: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    user = (user or "").strip().lstrip("@")
+    if not user:
+        return {}
+    key = user.lower()
+    profiles = _load_profiles()
+    cur = dict(profiles.get(key, {}))
+    cur["user"] = user
+    for f in ("bio", "links", "tierIcon", "profileTheme", "interfaceTheme"):
+        if f in data:
+            cur[f] = data[f]
+    profiles[key] = cur
+    _save_profiles(profiles)
+    return cur
+
+
+def _profile_for_row(github: str) -> Dict[str, Any]:
+    p = get_profile(github)
+    if not p:
+        return {}
+    return {
+        "bio": p.get("bio", ""),
+        "links": p.get("links", {}),
+        "tierIcon": p.get("tierIcon", ""),
+        "profileTheme": p.get("profileTheme", {}),
+        "interfaceTheme": p.get("interfaceTheme", {}),
+    }
+
+
 def _maybe_trim_ledger(path: Path) -> None:
     """Trim the ledger, keeping only chat blocks eligible for removal.
 
@@ -1197,6 +1267,16 @@ def _serve() -> None:
                         "token_present": bool(_load_token()),
                         "user": user,
                     }).encode("utf-8"), "application/json")
+                elif path == "/profile":
+                    from urllib.parse import parse_qs, urlparse
+                    q = parse_qs(urlparse(self.path).query)
+                    user = (q.get("user") or [""])[0].strip().lstrip("@")
+                    ident = _load_identity() or {}
+                    target = user or ident.get("github") or ""
+                    prof = _profile_for_row(target) if target else {}
+                    self._send_bytes(
+                        json.dumps({"user": target, **prof}).encode("utf-8"),
+                        "application/json")
                 elif path.startswith("/icons/"):
                     fname = Path(path[len("/icons/"):]).name
                     fp = web_root / "icons" / fname
@@ -1234,6 +1314,18 @@ def _serve() -> None:
                         ident = {"logged_in": False,
                                  "error": "no github token / login failed"}
                     self._send_bytes(json.dumps(ident).encode("utf-8"), "application/json")
+                elif path == "/profile":
+                    ident = _load_identity() or {}
+                    github = (ident.get("github") or "").strip().lstrip("@")
+                    if not github:
+                        self._send_bytes(
+                            json.dumps({"ok": False, "error": "connect a GitHub identity first"}).encode("utf-8"),
+                            "application/json")
+                    else:
+                        saved = set_profile(github, body)
+                        saved["user"] = github
+                        self._send_bytes(json.dumps({"ok": True, **saved}).encode("utf-8"),
+                                         "application/json")
                 elif path == "/chat":
                     msg = post_chat(body.get("text") or "")
                     self._send_bytes(json.dumps(msg or {"ok": False}).encode("utf-8"),

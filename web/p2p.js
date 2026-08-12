@@ -75,6 +75,13 @@ window.PixelOfficeP2P = (function () {
       sessions: serverRow.sessions || 0,
       time_s: serverRow.time_s || 0,
       tier: serverRow.tier || null,
+      // profile payload rides along with the score so peers see bio/links/
+      // chosen tier icon/themes without a separate channel.
+      bio: serverRow.bio || "",
+      links: serverRow.links || {},
+      tierIcon: serverRow.tierIcon || "",
+      profileTheme: serverRow.profileTheme || {},
+      interfaceTheme: serverRow.interfaceTheme || {},
       counter: ++entryCounter,
       ts: Date.now(),
     };
@@ -267,6 +274,8 @@ window.PixelOfficeP2P = (function () {
         avatar: e.avatar || "", url: e.url || "",
         ops: e.ops || 0, tools: e.tools || 0, sessions: e.sessions || 0,
         time_s: e.time_s || 0, tier: e.tier || null, agents: [],
+        bio: e.bio || "", links: e.links || {}, tierIcon: e.tierIcon || "",
+        profileTheme: e.profileTheme || {}, interfaceTheme: e.interfaceTheme || {},
       });
     });
     rows.sort(function (a, b) { return (b.ops - a.ops) || (b.tools - a.tools); });
@@ -284,6 +293,7 @@ window.PixelOfficeP2P = (function () {
       url: me ? me.url : "",
       ops: lastEntry ? lastEntry.ops : 0,
       tier: lastEntry ? lastEntry.tier : null,
+      tierIcon: lastEntry ? lastEntry.tierIcon : "",
       text: text.slice(0, 200),
       ts: Date.now(),
     };
