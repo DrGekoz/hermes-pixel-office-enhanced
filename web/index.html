@@ -9,27 +9,196 @@
   #wrap{display:flex;flex-direction:column;height:100%}
   #hdr{color:#e8c170;padding:7px 14px;font-size:13px;letter-spacing:1px;
     border-bottom:2px solid #3a2f4b;display:flex;justify-content:space-between;
-    align-items:center;gap:10px}
+    align-items:center;gap:10px;flex-wrap:wrap}
   #hdr .dim{color:#7a6f8f}
   #hdr .btn{cursor:pointer;color:#cfc4e8;border:1px solid #3a2f4b;
     border-radius:3px;padding:2px 8px;font-size:12px;background:#241c30;
     user-select:none}
   #hdr .btn:hover{border-color:#e8c170;color:#e8c170}
   #hdr .btn.on{color:#5fce7a;border-color:#5fce7a}
+  /* stats strip — sits left of the "N agents" count, same font */
+  #stats{display:flex;align-items:center;gap:12px;font-size:12px;
+    letter-spacing:0.5px;color:#cfc4e8;white-space:nowrap}
+  #stats .st{display:flex;align-items:center;gap:4px}
+  #stats .st b{color:#e8c170;font-weight:bold}
+  #stats .coin{width:12px;height:12px;image-rendering:pixelated;vertical-align:-2px}
+  #stats .sep{color:#3a2f4b}
   canvas{flex:1;image-rendering:pixelated;width:100%;height:100%}
+  /* panels */
+  #panel-holder{position:absolute;inset:0;pointer-events:none}
+  .panel{position:absolute;pointer-events:auto;background:#221a2e;border:2px solid #3a2f4b;
+    border-radius:4px;box-shadow:0 4px 20px rgba(0,0,0,.5);display:none;flex-direction:column;
+    font-size:12px;z-index:10}
+  .panel.open{display:flex}
+  .panel .ptitle{color:#e8c170;padding:6px 10px;font-size:12px;letter-spacing:1px;
+    border-bottom:1px solid #3a2f4b;display:flex;justify-content:space-between;align-items:center}
+  .panel .pclose{cursor:pointer;color:#7a6f8f;padding:0 4px}
+  .panel .pclose:hover{color:#e8c170}
+  /* leaderboard */
+  #lb{right:12px;top:12px;width:360px;max-height:78%;bottom:auto}
+  #lb-list{overflow-y:auto;flex:1;min-height:0}
+  .lb-row{display:flex;align-items:center;gap:8px;padding:6px 10px;
+    border-bottom:1px solid #2c2340;cursor:pointer}
+  .lb-row:hover{background:#2a2138}
+  .lb-row.me{background:#2a2438}
+  .lb-rank{width:22px;color:#7a6f8f;font-weight:bold;flex-shrink:0}
+  .lb-rank.top{color:#e8c170}
+  .lb-tier{width:24px;height:24px;image-rendering:pixelated;flex-shrink:0;
+    border:1px solid #3a2f4b;border-radius:3px;background:#1a1423;object-fit:contain}
+  .lb-tiernum{width:30px;color:#7a6f8f;font-size:10px;flex-shrink:0;text-align:center}
+  .lb-row.me .lb-tiernum{color:#e8c170}
+  .lb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    color:#cfc4e8}
+  .lb-name.dev{color:#ffd700}
+  .lb-dev{color:#ffd700;font-size:10px;border:1px solid #ffd70066;border-radius:3px;
+    padding:0 4px;margin-left:4px;flex-shrink:0}
+  .lb-ops{text-align:right;flex-shrink:0}
+  .lb-ops b{color:#e8c170}
+  .lb-ops .lbl{color:#7a6f8f;font-size:10px;display:block}
+  .lb-meta{color:#7a6f8f;font-size:10px;flex-shrink:0;text-align:right}
+  /* profile card */
+  #prof{left:50%;top:50%;transform:translate(-50%,-50%);width:340px;pointer-events:auto}
+  .pc-head{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid #3a2f4b}
+  .pc-av{width:48px;height:48px;image-rendering:pixelated;border:2px solid #3a2f4b;
+    border-radius:50%;object-fit:cover}
+  .pc-av.gh{background:#241c30}
+  .pc-tiermax{width:44px;height:44px;image-rendering:pixelated;object-fit:contain}
+  .pc-name{font-size:14px;color:#e8c170}
+  .pc-name.dev{color:#ffd700}
+  .pc-sub{color:#7a6f8f;font-size:11px}
+  .pc-ghlink{display:inline-flex;align-items:center;gap:4px;color:#7fa8d8;
+    text-decoration:none;font-size:11px;margin-top:3px}
+  .pc-ghlink:hover{color:#a8c8e8;text-decoration:underline}
+  .pc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
+  .pc-stat{background:#1a1423;border:1px solid #2c2340;border-radius:3px;padding:6px 8px}
+  .pc-stat .lbl{color:#7a6f8f;font-size:10px;letter-spacing:1px}
+  .pc-stat .val{color:#cfc4e8;font-size:13px;font-weight:bold}
+  .pc-stat .val.gold{color:#e8c170}
+  .pc-agents{padding:6px 12px 12px;color:#7a6f8f;font-size:11px;border-top:1px solid #2c2340}
+  .pc-agents b{color:#cfc4e8}
+  /* chat */
+  #chat{right:12px;bottom:12px;width:320px;height:300px}
+  #chat-list{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  .cmsg{display:flex;gap:6px;align-items:flex-start}
+  .cav{width:18px;height:18px;image-rendering:pixelated;border-radius:3px;flex-shrink:0}
+  .cav.gh{background:#241c30}
+  .cbody{min-width:0}
+  .cuser{color:#e8c170;font-size:10px;display:flex;align-items:center;gap:4px}
+  .ctier{display:inline-flex;align-items:center;gap:3px;color:#7a6f8f;font-size:9px;margin-left:2px}
+  .ctier img{width:13px;height:13px;image-rendering:pixelated;border-radius:2px}
+  .ctier b{color:#e8c170;font-weight:bold}
+  .cuser a{color:inherit;text-decoration:none}
+  .cuser a:hover{text-decoration:underline}
+  .ctext{color:#cfc4e8;font-size:11px;word-break:break-word;margin-top:1px}
+  .ctime{color:#555;font-size:9px}
+  #chat-input-row{display:flex;border-top:1px solid #3a2f4b}
+  #chat-input{flex:1;background:#1a1423;border:none;color:#cfc4e8;padding:8px 10px;
+    font-family:inherit;font-size:11px;outline:none}
+  #chat-send{background:#241c30;border:none;border-left:1px solid #3a2f4b;
+    color:#e8c170;cursor:pointer;padding:0 12px;font-family:inherit}
+  #chat-send:hover{background:#2a2138}
+  /* scrollable panels: thin, clean scrollbar that appears only on hover */
+  #lb-list,#tier-list,#chat-list{scrollbar-width:thin;scrollbar-color:transparent transparent}
+  #lb-list:hover,#tier-list:hover,#chat-list:hover{scrollbar-color:#4a3f63 transparent}
+  #lb-list::-webkit-scrollbar,#tier-list::-webkit-scrollbar,#chat-list::-webkit-scrollbar{width:8px}
+  #lb-list::-webkit-scrollbar-track,#tier-list::-webkit-scrollbar-track,#chat-list::-webkit-scrollbar-track{background:transparent}
+  #lb-list::-webkit-scrollbar-thumb,#tier-list::-webkit-scrollbar-thumb,#chat-list::-webkit-scrollbar-thumb{
+    background:transparent;border-radius:4px;border:2px solid transparent;background-clip:content-box}
+  #lb-list:hover::-webkit-scrollbar-thumb,#tier-list:hover::-webkit-scrollbar-thumb,#chat-list:hover::-webkit-scrollbar-thumb{
+    background:#4a3f63;border-radius:4px;border:2px solid transparent;background-clip:content-box}
+  #lb-list::-webkit-scrollbar-thumb:hover,#tier-list::-webkit-scrollbar-thumb:hover,#chat-list::-webkit-scrollbar-thumb:hover{
+    background:#5fce7a;border-radius:4px;border:2px solid transparent;background-clip:content-box}
+  /* chat message sound toggle (same icon as the header sound toggle) */
+  #chat .ptitle .csnd{cursor:pointer;color:#7a6f8f;padding:0 4px;user-select:none;font-size:11px}
+  #chat .ptitle .csnd:hover{color:#e8c170}
+  #chat .ptitle .csnd.on{color:#5fce7a}
+  /* tier ladder popover */
+  #tiers{left:12px;top:12px;width:300px;max-height:70%}
+  #tier-list{overflow-y:auto;flex:1;min-height:0}
+  .tier-row{display:flex;align-items:center;gap:8px;padding:5px 10px;
+    border-bottom:1px solid #2c2340}
+  .tier-row.locked{opacity:.45}
+  .tier-row.me{background:#2a2438}
+  .tier-row.me.current{background:#33291a;border-left:2px solid #e8c170}
+  .tier-row.me .tier-nm{color:#e8c170}
+  .tier-ic{width:20px;height:20px;image-rendering:pixelated;flex-shrink:0;object-fit:contain}
+  .tier-rank{width:34px;color:#7a6f8f;font-weight:bold;flex-shrink:0;text-align:right}
+  .tier-row.me .tier-rank{color:#e8c170}
+  .tier-nm{flex:1;color:#cfc4e8;font-size:11px}
+  .tier-ops{color:#7a6f8f;font-size:10px;text-align:right}
+  .tier-ops b{color:#e8c170}
+  /* connect modal */
+  #gh-connect{left:50%;top:50%;transform:translate(-50%,-50%);width:320px}
+  .gh-form{padding:12px;display:flex;flex-direction:column;gap:8px}
+  .gh-form input{background:#1a1423;border:1px solid #3a2f4b;color:#cfc4e8;
+    padding:7px 9px;font-family:inherit;font-size:12px;outline:none;border-radius:3px}
+  .gh-form input:focus{border-color:#e8c170}
+  .gh-form .hint{color:#7a6f8f;font-size:10px}
+  .gh-form .row{display:flex;gap:8px}
+  .gh-form button{background:#241c30;border:1px solid #3a2f4b;color:#cfc4e8;
+    padding:7px 10px;font-family:inherit;font-size:12px;cursor:pointer;border-radius:3px}
+  .gh-form button.primary{background:#3a2f1e;border-color:#e8c17055;color:#e8c170}
+  .gh-form button:hover{border-color:#e8c170;color:#e8c170}
+  #gh-status{font-size:11px;padding:0 12px 10px;color:#5fce7a}
+  #gh-status.err{color:#d84f6f}
+  #gh-status .gh-u{display:flex;align-items:center;gap:6px}
+  #gh-status img{width:20px;height:20px;image-rendering:pixelated;border-radius:50%}
+  /* empty hint */
+  .pempty{color:#7a6f8f;padding:14px;text-align:center;font-size:11px}
+  #hdr .gh-chip{display:inline-flex;align-items:center;gap:5px;color:#7fa8d8;
+    font-size:11px;border:1px solid #3a2f4b;border-radius:3px;padding:1px 6px;cursor:pointer}
+  #hdr .gh-chip img{width:14px;height:14px;image-rendering:pixelated;border-radius:50%}
+  #hdr .gh-chip.dev{color:#ffd700;border-color:#ffd70066}
 </style>
 </head>
 <body>
 <div id="wrap">
   <div id="hdr">
     <span>☤ HERMES PIXEL OFFICE</span>
+    <div id="stats">
+      <span class="st" title="currency — points earned per tool call">
+        <img class="coin" src="icons/op.webp" alt=""> <b id="st-ops">0</b> Ops</span>
+      <span class="sep">·</span>
+      <span class="st" title="tool calls"><b id="st-tools">0</b> calls</span>
+      <span class="sep">·</span>
+      <span class="st" title="sessions run"><b id="st-sess">0</b> sessions</span>
+      <span class="sep">·</span>
+      <span class="st" title="total time ran"><b id="st-time">0s</b> ran</span>
+    </div>
     <span style="flex:1"></span>
     <span class="dim" id="count">connecting…</span>
+    <span class="gh-chip" id="gh-chip" title="connect a GitHub identity">⚙ connect</span>
+    <span class="btn" id="tiersBtn" title="tier ladder">Tiers</span>
+    <span class="btn" id="lbBtn" title="leaderboard">Leaderboard</span>
+    <span class="btn" id="chatBtn" title="office chat">Chat</span>
     <span class="btn" id="sound" title="chime when an agent needs approval or a subagent finishes">♪ sound off</span>
     <span class="btn" id="spawn" style="display:none" title="open a terminal running hermes">+ agent</span>
   </div>
-  <canvas id="c"></canvas>
+  <div id="office" style="position:relative;flex:1;min-height:0;overflow:hidden">
+    <canvas id="c"></canvas>
+    <div id="panel-holder">
+      <div class="panel" id="lb"><div class="ptitle"><span>LEADERBOARD</span><span class="pclose" data-close="lb">✕</span></div><div id="lb-list"></div></div>
+      <div class="panel" id="tiers"><div class="ptitle"><span>TIER LADDER</span><span class="pclose" data-close="tiers">✕</span></div><div id="tier-list"></div></div>
+      <div class="panel" id="chat"><div class="ptitle"><span>OFFICE CHAT</span><span style="display:flex;align-items:center;gap:6px"><span class="csnd" id="chat-sound" title="chat message sound">♪ sound off</span><span class="pclose" data-close="chat">✕</span></span></div>
+        <div id="chat-list"></div>
+        <div id="chat-input-row"><input id="chat-input" placeholder="say something to the office…" autocomplete="off"><button id="chat-send">▶</button></div>
+      </div>
+      <div class="panel" id="prof"></div>
+      <div class="panel" id="gh-connect">
+        <div class="ptitle"><span>CONNECT GITHUB</span><span class="pclose" data-close="gh-connect">✕</span></div>
+        <div class="gh-form">
+          <button class="primary" id="gh-login" style="padding:9px 10px">⇪ Log in with GitHub</button>
+          <div class="hint">Logs in with the GitHub account this machine is authenticated as, so your real username shows on the leaderboard. Logging in is what lets your scores and chat reach other users over P2P.</div>
+          <div class="row"><input id="gh-input" placeholder="or enter a github username" autocomplete="off"></div>
+          <div class="row"><button id="gh-save">Use name</button><button id="gh-clear">Disconnect</button></div>
+        </div>
+        <div id="gh-status"></div>
+      </div>
+    </div>
+  </div>
 </div>
+<script src="tiers.js"></script>
+<script src="p2p.js"></script>
 <script>
 "use strict";
 // ── host detection ──────────────────────────────────────────────────────
@@ -39,6 +208,7 @@ const vsapi = IN_VSCODE ? acquireVsCodeApi() : null;
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let S = 4;                                  // pixel scale (auto-shrinks if crowded)
 let agents = [], frame = 0, offline = null;
+let state = null;
 
 // ── palettes / sprites ──────────────────────────────────────────────────
 const SKIN=["#f0c8a0","#c68b59","#8d5524","#ffdbac","#e0ac69","#a1665e"];
@@ -47,6 +217,17 @@ const HAIR=["#2b2b2b","#5a3825","#c9a227","#8a8a8a","#7a3030","#4a6741"];
 function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return Math.abs(h)}
 function px(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.round(x*S),Math.round(y*S),w*S,h*S)}
 
+// ── helpers ─────────────────────────────────────────────────────────────
+function fmtNum(n){n=Math.round(Number(n)||0);if(n>=1e9)return (n/1e9).toFixed(1)+"B";
+  if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"k";return ""+n}
+function fmtTime(s){s=Math.floor(Number(s)||0);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
+  if(h)return h+"h "+m+"m";if(m)return m+"m "+sec+"s";return sec+"s"}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function iconPath(name){return "icons/"+(name||"001_Wood_Heraldic_Shield_orig462")+".webp"}
+function timeStr(ts){const d=new Date(ts*1000);return d.toTimeString().slice(0,5)}
+function isDev(g){return /^drgekoz$/i.test(g||"")}
+function isMe(id){return state&&state.identity&&(id===state.identity.github||id===state.identity.name)}
+
 // ── office scene ────────────────────────────────────────────────────────
 function drawOffice(w,h){
   for(let y=0;y<h;y+=8)for(let x=0;x<w;x+=8)
@@ -54,41 +235,34 @@ function drawOffice(w,h){
   px(0,0,w,6,"#3a2f4b"); px(0,6,w,1,"#241c30");            // wall
   for(let x=14;x<w-14;x+=26){px(x,1,10,4,"#151022");        // windows
     px(x+1,2,8,2,"#3b5a8f");px(x+2,2,2,1,"#7fa8d8");}
-  // door (agents walk in here)
-  px(1,1,7,6,"#54381f"); px(2,2,5,5,"#6b4a2f"); px(6,4,1,1,"#e8c170");
-  // rug
+  px(1,1,7,6,"#54381f"); px(2,2,5,5,"#6b4a2f"); px(6,4,1,1,"#e8c170"); // door
   const rw=Math.min(24,w-10); px((w-rw)/2,h-8,rw,5,"#3a2f4b");
   px((w-rw)/2+1,h-7,rw-2,3,"#443358");
-  // plant, right corner
   px(w-6,h-14,3,1,"#5fce7a");px(w-7,h-15,2,2,"#5fce7a");px(w-4,h-15,2,2,"#4aa860");
   px(w-6,h-13,2,3,"#8d5524");px(w-6,h-10,3,1,"#54381f");
-  // water cooler, left side
   px(2,h-14,4,5,"#7fa8d8");px(3,h-15,2,1,"#a8c8e8");px(2,h-9,4,1,"#4a4a5a");
   px(3,h-8,2,2,"#4a4a5a");
-  // coffee machine on a small table, right of door
   px(10,h-11,6,1,"#6b4a2f");px(10,h-10,6,3,"#54381f");
   px(11,h-14,4,3,"#33283f");px(12,h-13,1,1,"#d84f6f");
 }
 function drawDesk(x,y){
   px(x,y+10,16,1,"#6b4a2f"); px(x,y+11,16,3,"#54381f");
   px(x+1,y+14,2,4,"#3c2814"); px(x+13,y+14,2,4,"#3c2814");
-  px(x+10,y+4,6,5,"#191524");                    // monitor
+  px(x+10,y+4,6,5,"#191524");
   px(x+12,y+9,2,1,"#4a4a5a");
 }
-// monitor screen color reflects activity
 function deskScreen(x,y,a){
   const t=frame>>3;
   let col="#0f2c1e";
   if(a){
-    if(a.activity==="running")col=(t%4<2)?"#0f3c1e":"#0f2c16";       // terminal green blink
-    else if(a.activity==="browsing")col=(t%6<3)?"#1e2c4a":"#24365a"; // blue page
-    else if(a.activity==="typing")col=(t%2)?"#12321e":"#0f2c1e";     // fast flicker
-    else if(a.status==="waiting")col="#3c1e28";                      // dim red
+    if(a.activity==="running")col=(t%4<2)?"#0f3c1e":"#0f2c16";
+    else if(a.activity==="browsing")col=(t%6<3)?"#1e2c4a":"#24365a";
+    else if(a.activity==="typing")col=(t%2)?"#12321e":"#0f2c1e";
+    else if(a.status==="waiting")col="#3c1e28";
   }
   px(x+11,y+5,4,3,col);
 }
 
-// ── characters ──────────────────────────────────────────────────────────
 function drawChar(a,fx,fy,seated){
   const h=hash(a.id), skin=SKIN[h%SKIN.length], shirt=SHIRT[(h>>3)%SHIRT.length],
         hair=HAIR[(h>>6)%HAIR.length], t=frame>>4;
@@ -96,38 +270,35 @@ function drawChar(a,fx,fy,seated){
   const bob=((a.status==="working"||walking)&&(t%2))?1:0;
   const x=fx, y=fy+bob;
   if(a.status==="gone")ctx.globalAlpha=0.35;
-  // hair — style varies per agent
   px(x+2,y,4,3,hair);
-  if(h%3===0)px(x+1,y+1,1,2,hair);                 // side hair
-  if(h%5===0)px(x+2,y-1,4,1,hair);                 // tall hair
-  px(x+2,y+2,4,3,skin);                            // face
-  if(h%4===0){px(x+2,y+3,2,1,"#222a44");px(x+4,y+3,2,1,"#222a44")} // glasses
+  if(h%3===0)px(x+1,y+1,1,2,hair);
+  if(h%5===0)px(x+2,y-1,4,1,hair);
+  px(x+2,y+2,4,3,skin);
+  if(h%4===0){px(x+2,y+3,2,1,"#222a44");px(x+4,y+3,2,1,"#222a44")}
   else{px(x+3,y+3,1,1,"#111");px(x+5,y+3,1,1,"#111")}
-  px(x+1,y+5,6,5,shirt);                           // body
-  if(a.kind==="subagent")px(x+1,y+5,6,1,"#e8c170");// gold collar
-  px(x+0,y+6,1,3,skin); px(x+7,y+6,1,3,skin);      // arms
-  if(walking){                                     // legs alternate
+  px(x+1,y+5,6,5,shirt);
+  if(a.kind==="subagent")px(x+1,y+5,6,1,"#e8c170");
+  px(x+0,y+6,1,3,skin); px(x+7,y+6,1,3,skin);
+  if(walking){
     if(t%2){px(x+2,y+10,1,3,"#2d2d3d");px(x+5,y+11,1,2,"#2d2d3d")}
     else{px(x+2,y+11,1,2,"#2d2d3d");px(x+5,y+10,1,3,"#2d2d3d")}
   }else{
     px(x+2,y+10,1,3,"#2d2d3d"); px(x+5,y+10,1,3,"#2d2d3d");
   }
-  // activity props (seated only)
   if(seated){
-    if(a.activity==="typing"&&(frame>>2)%2)px(x+7,y+8,2,1,skin);      // fast hands
+    if(a.activity==="typing"&&(frame>>2)%2)px(x+7,y+8,2,1,skin);
     else if(a.activity==="running"&&t%2)px(x+7,y+8,2,1,skin);
-    else if(a.activity==="reading"){px(x+7,y+7,3,2,"#e8e0c8");px(x+8,y+7,1,2,"#b8b0a0")} // book
-    else if(a.activity==="delegating"&&t%2)px(x+8,y+6,2,1,skin);      // pointing
+    else if(a.activity==="reading"){px(x+7,y+7,3,2,"#e8e0c8");px(x+8,y+7,1,2,"#b8b0a0")}
+    else if(a.activity==="delegating"&&t%2)px(x+8,y+6,2,1,skin);
   }
   ctx.globalAlpha=1;
 }
 function drawBubble(a,x,y){
   const t=frame>>4;
-  if(a.status==="waiting"){                        // needs input — loud
+  if(a.status==="waiting"){
     const by=y-6-((frame>>3)%2);
     px(x+1,by,6,4,"#e8d8b0"); px(x+2,by+4,1,1,"#e8d8b0");
-    px(x+4,by+1,1,2,"#c9302f"); px(x+4,by+3,0,0,"#c9302f");
-    px(x+4,by+3,1,1,"#c9302f");
+    px(x+4,by+1,1,2,"#c9302f"); px(x+4,by+3,1,1,"#c9302f");
   }else if(a.status==="working"&&a.tool){
     px(x+3,y-4,3,3,"#e8c170"); px(x+4,y-3,1,1,"#1a1423");
   }else if(a.status==="thinking"){
@@ -152,10 +323,8 @@ function label(a,x,y){
     ctx.fillText(a.detail.slice(0,19),(x+8)*S,(y+24.5)*S)}
 }
 
-// ── seats + walking ─────────────────────────────────────────────────────
-// chars: id → {x,y, seat:{x,y}, phase:"in"|"seated"|"out", lastStatus}
 const chars = new Map();
-const WALK = 0.55;                                  // grid cells per frame
+const WALK = 0.55;
 function seatPos(i,perRow){
   return {x:10+(i%perRow)*34, y:14+Math.floor(i/perRow)*32};
 }
@@ -171,7 +340,6 @@ function stepChars(perRow){
     const dx=tx-c.x, dy=ty-c.y, d=Math.hypot(dx,dy);
     if(d<WALK){ c.x=tx;c.y=ty; if(c.phase==="in")c.phase="seated"; }
     else { c.x+=dx/d*WALK; c.y+=dy/d*WALK; }
-    // sound triggers on status transitions
     if(c.lastStatus!==a.status){
       if(a.status==="waiting")chime([880,660,880]);
       else if(a.status==="done"&&a.kind==="subagent")chime([520,780]);
@@ -188,7 +356,6 @@ function stepChars(perRow){
   }
 }
 
-// ── sound (off by default; toggle persists) ─────────────────────────────
 let soundOn=false, audioCtx=null;
 try{soundOn=localStorage.getItem("pixelOfficeSound")==="1"}catch(e){}
 function chime(notes){
@@ -213,17 +380,317 @@ sBtn.onclick=()=>{soundOn=!soundOn;
   if(soundOn)chime([660]); syncSoundBtn()};
 syncSoundBtn();
 
-// ── + agent button (VS Code only) ───────────────────────────────────────
 const spawnBtn=document.getElementById("spawn");
 if(IN_VSCODE){spawnBtn.style.display="";
   spawnBtn.onclick=()=>vsapi.postMessage({type:"spawnAgent"});}
+
+// ── panels: open/close ─────────────────────────────────────────────────
+function togglePanel(id,force){
+  const el=document.getElementById(id);
+  const was=el.classList.contains("open");
+  if(force===true&&was)return; if(force===false&&!was)return;
+  el.classList.toggle("open",force===undefined?!was:force);
+  if(id==="lb")document.getElementById("lbBtn").classList.toggle("on",el.classList.contains("open"));
+  if(id==="chat")document.getElementById("chatBtn").classList.toggle("on",el.classList.contains("open"));
+  if(id==="tiers")document.getElementById("tiersBtn").classList.toggle("on",el.classList.contains("open"));
+}
+document.querySelectorAll(".pclose").forEach(b=>b.onclick=()=>togglePanel(b.dataset.close,false));
+document.getElementById("lbBtn").onclick=()=>togglePanel("lb");
+document.getElementById("chatBtn").onclick=()=>togglePanel("chat");
+document.getElementById("tiersBtn").onclick=()=>togglePanel("tiers");
+document.getElementById("gh-chip").onclick=()=>togglePanel("gh-connect");
+
+// ── leaderboard ────────────────────────────────────────────────────────
+function tierRowHtml(r){
+  const dev=isDev(r.github), me=isMe(r.id);
+  const tier=r.tier||{name:"—",icon:""};
+  return '<div class="lb-row'+(me?" me":"")+'" data-id="'+esc(r.id)+'">'+
+    '<span class="lb-rank'+(r.rank<=3?" top":"")+'">'+r.rank+'</span>'+
+    '<span class="lb-tiernum">#'+esc(tier.t||"")+'</span>'+
+    '<img class="lb-tier" src="'+iconPath(tier.icon)+'" alt="" onerror="this.style.visibility=\'hidden\'">'+
+    '<span class="lb-name'+(dev?" dev":"")+'">'+esc(r.name)+
+      (dev?'<span class="lb-dev">DEV</span>':'')+'</span>'+
+    '<span class="lb-meta">'+fmtNum(r.tools)+' calls<br>'+fmtTime(r.time_s)+'</span>'+
+    '<span class="lb-ops"><b>'+fmtNum(r.ops)+'</b><span class="lbl">Ops · '+esc(tier.name)+'</span></span>'+
+    '</div>';
+}
+// ── merged leaderboard (local live score + P2P peer scores) ────────────
+const LS_BOARD = "pixelOfficeBoard";
+function localRow(){
+  return (state && state.leaderboard && state.leaderboard[0]) || null;
+}
+function currentBoard(){
+  if(window.PixelOfficeP2P && PixelOfficeP2P.isStarted()){
+    return PixelOfficeP2P.getLeaderboard(localRow());
+  }
+  return (state && state.leaderboard) || [];
+}
+function mergeBoards(live, cached){
+  // live (real-time) wins over the last-known cached board; the cache keeps
+  // the board populated when nobody is online. ONLY GitHub usernames appear —
+  // any row without a github handle (cached agents, legacy local rows) is
+  // dropped so agents never show up on the leaderboard.
+  const m=new Map();
+  (cached||[]).concat(live||[]).forEach(r=>{
+    if(!r || !(r.github)) return;
+    m.set(r.id||r.github||r.name, r);
+  });
+  const rows=[...m.values()];
+  rows.sort((a,b)=>(b.ops-a.ops)||(b.tools-a.tools));
+  rows.forEach((r,i)=>r.rank=i+1);
+  return rows;
+}
+function loadCachedBoard(){ try{return JSON.parse(localStorage.getItem(LS_BOARD)||"[]")}catch(e){return []} }
+function saveCachedBoard(rows){ try{localStorage.setItem(LS_BOARD,JSON.stringify(rows.slice(0,50)))}catch(e){} }
+function renderLeaderboard(){
+  const el=document.getElementById("lb-list");
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  if(!board.length){el.innerHTML='<div class="pempty">connect a GitHub username to show on the leaderboard</div>';return;}
+  el.innerHTML=board.map(tierRowHtml).join("");
+  el.querySelectorAll(".lb-row").forEach(row=>{
+    row.onclick=()=>showProfile(row.dataset.id);
+  });
+}
+
+// ── profile card ───────────────────────────────────────────────────────
+function showProfile(id){
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const r=board.find(x=>x.id===id||x.github===id);
+  if(!r)return;
+  const dev=isDev(r.github);
+  const tier=r.tier||{name:"—",icon:""};
+  const agents=(r.agents||[]).map(a=>esc(a.label)).join(" · ")||"—";
+  const ghLink=r.url||(r.github?"https://github.com/"+esc(r.github):"");
+  document.getElementById("prof").innerHTML=
+    '<div class="ptitle"><span>AGENT · '+r.rank+'</span><span class="pclose" data-close="prof">✕</span></div>'+
+    '<div class="pc-head">'+
+      (r.avatar?'<img class="pc-av" src="'+esc(r.avatar)+'" alt="">':'<div class="pc-av gh"></div>')+
+      '<img class="pc-tiermax" src="'+iconPath(tier.icon)+'" alt="" onerror="this.style.display=\'none\'">'+
+      '<div><div class="pc-name'+(dev?" dev":"")+'">'+esc(r.name)+
+        (dev?' <span class="lb-dev">DEV</span>':'')+'</div>'+
+      '<div class="pc-sub">'+esc(tier.name)+' · Tier '+tier.t+'</div>'+
+      (ghLink?'<a class="pc-ghlink" href="'+esc(ghLink)+'" target="_blank" rel="noopener">🐙 '+esc(r.github||"GitHub")+' ↗</a>':'')+
+      '</div></div>'+
+    '<div class="pc-stats">'+
+      '<div class="pc-stat"><div class="lbl">OPS</div><div class="val gold">'+fmtNum(r.ops)+'</div></div>'+
+      '<div class="pc-stat"><div class="lbl">TOOL CALLS</div><div class="val">'+fmtNum(r.tools)+'</div></div>'+
+      '<div class="pc-stat"><div class="lbl">SESSIONS</div><div class="val">'+fmtNum(r.sessions)+'</div></div>'+
+      '<div class="pc-stat"><div class="lbl">TIME RAN</div><div class="val">'+fmtTime(r.time_s)+'</div></div>'+
+      '</div>'+
+    '<div class="pc-agents"><b>AGENTS:</b> '+agents+'</div>';
+  document.getElementById("prof").querySelector(".pclose").onclick=()=>togglePanel("prof",false);
+  togglePanel("prof",true);
+}
+
+// ── tier ladder ────────────────────────────────────────────────────────
+function tierForOps(ops){
+  const list=(window.OFFICE_TIERS && window.OFFICE_TIERS.length)
+    ? window.OFFICE_TIERS
+    : (state && state.tiers ? state.tiers : []);
+  let cur=list[0]||null;
+  for(const t of list){ if((t.ops||0)<=ops) cur=t; else break; }
+  return cur;
+}
+function myTierName(){
+  if(!state||!state.identity)return null;
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const my=board.find(r=>isMe(r.id));
+  return my ? (tierForOps(my.ops) || my.tier) : null;
+}
+function renderTiers(){
+  const el=document.getElementById("tier-list");
+  // Prefer the static full ladder shipped in tiers.js (all 500 icons) so the
+  // ladder updates instantly; fall back to whatever the server exposed.
+  const tiers=(window.OFFICE_TIERS && window.OFFICE_TIERS.length)
+    ? window.OFFICE_TIERS
+    : (state && state.tiers ? state.tiers : []);
+  if(!tiers.length){el.innerHTML='<div class="pempty">tiers unavailable</div>';return;}
+  const myTier=myTierName();
+  const myIdx=myTier?myTier.t-1:-1;
+  el.innerHTML=tiers.map((t,i)=>{
+    const reached=myTier?i<=myIdx:false;
+    const current=i===myIdx;
+    const cls=(reached?"me":"locked")+(current?" current":"");
+    return '<div class="tier-row '+cls+'">'+
+      '<span class="tier-rank">#'+t.t+'</span>'+
+      '<img class="tier-ic" src="'+iconPath(t.icon)+'" alt="" onerror="this.style.visibility=\'hidden\'">'+
+      '<span class="tier-nm">'+esc(t.name)+'</span>'+
+      '<span class="tier-ops"><b>'+fmtNum(t.ops)+'</b> Ops'+(current?' · you':"")+'</span>'+
+      '</div>';
+  }).join("");
+}
+
+// ── chat (via P2P mesh) ───────────────────────────────────────────────
+const LS_CHAT = "pixelOfficeChat";
+let chatSoundOn=false;
+try{chatSoundOn=localStorage.getItem("pixelOfficeChatSound")==="1"}catch(e){}
+function chatChime(){ // gentle two-note chat "ding" (distinct from approval chime)
+  if(!chatSoundOn)return;
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    [880,1320].forEach((f,i)=>{
+      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+      o.type="sine";o.frequency.value=f;
+      g.gain.setValueAtTime(0.05,audioCtx.currentTime+i*0.09);
+      g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+i*0.09+0.09);
+      o.connect(g);g.connect(audioCtx.destination);
+      o.start(audioCtx.currentTime+i*0.09);o.stop(audioCtx.currentTime+i*0.09+0.1);
+    });
+  }catch(e){}
+}
+function syncChatSoundBtn(){
+  const b=document.getElementById("chat-sound");
+  b.textContent=chatSoundOn?"♪ sound on":"♪ sound off";
+  b.classList.toggle("on",chatSoundOn);
+}
+document.getElementById("chat-sound").onclick=()=>{
+  chatSoundOn=!chatSoundOn;
+  try{localStorage.setItem("pixelOfficeChatSound",chatSoundOn?"1":"0")}catch(e){}
+  if(chatSoundOn)chatChime(); syncChatSoundBtn();
+};
+syncChatSoundBtn();
+function loadCachedChat(){ try{return JSON.parse(localStorage.getItem(LS_CHAT)||"[]")}catch(e){return []} }
+function saveCachedChat(msgs){ try{localStorage.setItem(LS_CHAT,JSON.stringify(msgs.slice(-200)))}catch(e){} }
+function chatMsgHtml(m){
+  const gh=isDev(m.github);
+  const ts=m.ts||m.t||Date.now();
+  const tier=(m.tier&&m.tier.icon)
+    ? '<span class="ctier"><img src="'+iconPath(m.tier.icon)+'" alt="" onerror="this.style.display=\'none\'"> <b>#'+esc(m.tier.t||"")+'</b></span>'
+    : '';
+  return '<div class="cmsg">'+
+    (m.avatar?'<img class="cav" src="'+esc(m.avatar)+'" alt="">':'<div class="cav gh"></div>')+
+    '<div class="cbody"><div class="cuser">'+
+    (m.url?'<a href="'+esc(m.url)+'" target="_blank" rel="noopener">':"")+
+    '<span style="color:'+(gh?"#ffd700":"#e8c170")+'">'+esc(m.user||"guest")+'</span>'+
+    (gh?' <span style="font-size:8px;color:#ffd700;border:1px solid #ffd70066;border-radius:2px;padding:0 3px">DEV</span>':'')+
+    (m.url?'</a>':"")+
+    tier+
+    ' <span class="ctime">'+timeStr(ts/1000)+'</span></div>'+
+    '<div class="ctext">'+esc(m.text)+'</div></div></div>';
+}
+function renderChat(){
+  const el=document.getElementById("chat-list");
+  let msgs=(window.PixelOfficeP2P?PixelOfficeP2P.getChat():[]);
+  // merge the cached history so chat survives nobody being online
+  const byKey=new Map();
+  loadCachedChat().forEach(m=>byKey.set(m.user+"|"+m.text+"|"+(m.ts||""),m));
+  msgs.forEach(m=>byKey.set(m.user+"|"+m.text+"|"+(m.ts||""),m));
+  msgs=[...byKey.values()].sort((a,b)=>(a.ts||0)-(b.ts||0));
+  saveCachedChat(msgs);
+  if(!msgs.length){el.innerHTML='<div class="pempty">no messages yet — say something to the office</div>';return;}
+  // Attach each sender's tier (icon + number) — from the message if present,
+  // else look it up from the merged leaderboard so cached/older messages still
+  // show the right tier badge.
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const tierBy=new Map();
+  board.forEach(r=>{
+    if(r.github)tierBy.set(String(r.github).toLowerCase(), r.tier);
+    tierBy.set(String(r.name).toLowerCase(), r.tier);
+  });
+  msgs.forEach(m=>{
+    if(!m.tier){
+      const k=String(m.github||m.user||"").toLowerCase();
+      m.tier=tierBy.get(k)||null;
+    }
+  });
+  el.innerHTML=msgs.map(chatMsgHtml).join("");
+  el.scrollTop=el.scrollHeight;
+}
+function sendChat(){
+  const input=document.getElementById("chat-input");
+  const text=input.value.trim();
+  if(!text)return;
+  input.value="";
+  if(window.PixelOfficeP2P) PixelOfficeP2P.sendChat(text);
+  renderChat();
+}
+document.getElementById("chat-send").onclick=sendChat;
+document.getElementById("chat-input").addEventListener("keydown",e=>{if(e.key==="Enter")sendChat()});
+
+// ── GitHub connect ─────────────────────────────────────────────────────
+function renderIdentity(){
+  const id=state&&state.identity;
+  const chip=document.getElementById("gh-chip");
+  if(id&&id.github){
+    chip.innerHTML=(id.avatar?'<img src="'+esc(id.avatar)+'" alt="">':'⚙ ')+esc(id.name||id.github);
+    chip.classList.toggle("dev",isDev(id.github));
+  }else{
+    chip.innerHTML="⚙ connect";chip.classList.remove("dev");
+  }
+  const st=document.getElementById("gh-status");
+  if(id&&id.github){
+    st.className="";st.innerHTML='<div class="gh-u">'+(id.avatar?'<img src="'+esc(id.avatar)+'" alt="">':"")+
+      '<span>connected as <b style="color:#e8c170">'+esc(id.name||id.github)+
+      '</b>'+ (isDev(id.github)?' <span style="color:#ffd700;border:1px solid #ffd70066;border-radius:2px;padding:0 3px">DEV</span>':"")+
+      (id.url?' — <a href="'+esc(id.url)+'" target="_blank" rel="noopener" style="color:#7fa8d8">profile ↗</a>':"")+
+      '</span></div>';
+  }else{
+    st.className="";st.textContent="not connected — agents show as their session label.";
+  }
+}
+document.getElementById("gh-save").onclick=()=>{
+  const u=document.getElementById("gh-input").value.trim();
+  if(!u)return;
+  fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({github:u})})
+    .then(r=>r.json()).then(()=>{document.getElementById("gh-input").value="";pollNow()})
+    .catch(()=>{document.getElementById("gh-status").className="err";
+      document.getElementById("gh-status").textContent="connect failed";});
+};
+document.getElementById("gh-clear").onclick=()=>{
+  fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({github:""})})
+    .then(()=>{document.getElementById("gh-input").value="";pollNow()}).catch(()=>{});
+};
+document.getElementById("gh-login").onclick=()=>{
+  const st=document.getElementById("gh-status");
+  st.className="";st.textContent="logging in…";
+  fetch("auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
+    .then(r=>r.json()).then(d=>{
+      if(d.logged_in){
+        document.getElementById("gh-input").value="";pollNow();
+      }else{
+        st.className="err";
+        st.textContent="no GitHub login available on this machine — try 'Use name' or run `gh auth login`.";
+      }
+    })
+    .catch(()=>{st.className="err";st.textContent="login failed";});
+};
+
+// ── P2P mesh wiring ─────────────────────────────────────────────────────
+let p2pStarted=false, lastIdGit="";
+if(window.PixelOfficeP2P){
+  PixelOfficeP2P.onChat(m=>{
+    if(m && m.user && !(m.github && state && state.identity &&
+       state.identity.github===m.github)) chatChime(); // ding on others' messages
+    renderChat();
+  });
+  PixelOfficeP2P.onScore(()=>{
+    renderLeaderboard(); renderTiers();
+    saveCachedBoard(mergeBoards(currentBoard(),loadCachedBoard()));
+  });
+}
+function syncP2P(){
+  if(!window.PixelOfficeP2P) return;
+  const id=(state&&state.identity)||null;
+  const git=id&&id.github?id.github:"";
+  if(git && !p2pStarted){
+    PixelOfficeP2P.start(id);
+    p2pStarted=true;
+  }else if(!git && p2pStarted){
+    PixelOfficeP2P.stop();
+    p2pStarted=false;
+  }
+  if(p2pStarted){
+    PixelOfficeP2P.broadcastScore(localRow());
+  }
+}
 
 // ── render loop ─────────────────────────────────────────────────────────
 function render(){
   frame++;
   const W=cv.clientWidth,H=cv.clientHeight;
   if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
-  // auto-shrink pixels if the office is crowded
   const rowsAt=s=>Math.ceil(agents.length/Math.max(1,Math.floor((W/s-8)/34)));
   S=4; while(S>2 && 14+rowsAt(S)*32*S>H-8*S && agents.length) S--;
   const gw=Math.floor(W/S),gh=Math.floor(H/S);
@@ -241,7 +708,6 @@ function render(){
     if(seated){const seat=seatPos(i,perRow);
       drawBubble(a,seat.x+2,seat.y); label(a,seat.x,seat.y);}
   });
-  // walking-out ghosts
   for(const [id,c] of chars){
     if(c.phase==="out"&&!agents.find(a=>a.id===id))
       drawChar({id,kind:"main",status:"gone",activity:""},c.x,c.y,false);
@@ -259,27 +725,42 @@ function render(){
   requestAnimationFrame(render);
 }
 
-// ── data feed: postMessage (VS Code) or poll /state (browser) ───────────
-function applyState(state){
-  offline=null; agents=(state&&state.agents)||[];
+// ── data feed ───────────────────────────────────────────────────────────
+function applyState(st){
+  offline=null; agents=(st&&st.agents)||[]; state=st;
   const n=agents.length, w=agents.filter(a=>a.status==="waiting").length;
   document.getElementById("count").textContent=
-    n+" agent"+(n===1?"":"s")+(w?" · "+w+" waiting!":"");
+    n+" agent"+(n===1?"": "s")+(w?" · "+w+" waiting!":"");
+  // stats strip — to the LEFT of the count
+  const gs=(st&&st.stats)||{};
+  document.getElementById("st-ops").textContent=fmtNum(gs.ops||0);
+  document.getElementById("st-tools").textContent=fmtNum(gs.tools||0);
+  document.getElementById("st-sess").textContent=fmtNum(gs.sessions||0);
+  document.getElementById("st-time").textContent=fmtTime(gs.time_ms?gs.time_ms/1000:0);
+  syncP2P();
+  renderIdentity();
+  renderLeaderboard();
+  renderTiers();
+  renderChat();
+  saveCachedBoard(mergeBoards(currentBoard(),loadCachedBoard()));
 }
 if(IN_VSCODE){
   window.addEventListener("message",(ev)=>{
     const m=ev.data||{};
     if(m.type==="state")applyState(m.state);
-    else if(m.type==="offline"){offline=m.url;agents=[];
+    else if(m.type==="offline"){offline=m.url;agents=[];state=null;
       document.getElementById("count").textContent="offline";}
   });
 }else{
-  (async function poll(){
+  let polling=false;
+  async function pollNow(){
+    if(polling)return; polling=true;
     try{const r=await fetch("state");applyState(await r.json());}
-    catch(e){offline=String(location.host);agents=[];
+    catch(e){offline=String(location.host);agents=[];state=null;
       document.getElementById("count").textContent="offline";}
-    setTimeout(poll,1500);
-  })();
+    polling=false;
+  }
+  (function loop(){pollNow();setTimeout(loop,1500);})();
 }
 render();
 </script>

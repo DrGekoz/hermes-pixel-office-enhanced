@@ -2,8 +2,9 @@
 
 A pixel-art virtual office for [Hermes Agent](https://github.com/NousResearch/hermes-agent) —
 every agent session and every `delegate_task` subagent becomes an animated
-pixel character at a desk. Watch tools fire, subagents spawn and finish, and
-approval requests flag you visually, live in your browser or in VS Code.
+pixel character at a desk. Watch tools fire, subagents spawn and finish,
+approval requests flag you visually, and — with a GitHub login — compete on a
+live leaderboard and chat with other offices, all in your browser or VS Code.
 
 Hermes' answer to "Pixel Agents" for Claude Code.
 
@@ -11,6 +12,9 @@ Hermes' answer to "Pixel Agents" for Claude Code.
 
 Companion VS Code extension: [hermes-pixel-office-vscode](https://github.com/teknium1/hermes-pixel-office-vscode)
 (this plugin works standalone in any browser — the extension is optional).
+
+> **v0.3.0** adds the interactive office: a GitHub-username leaderboard, a
+> 500-tier ladder, P2P office chat, and the full IdleViber icon set.
 
 ## What you'll see
 
@@ -23,9 +27,48 @@ Companion VS Code extension: [hermes-pixel-office-vscode](https://github.com/tek
   monitor flicker), delegating (pointing)
 - Dangerous-command approvals: red "!" speech bubble + "needs input!" +
   header counter ("N waiting!")
+- Header stats strip: live **Ops**, tool calls, sessions, and total time ran
 - Optional sound: chime when an agent needs approval or a subagent finishes
   (♪ toggle in the header, off by default, persists)
 - Sessions from ALL Hermes processes on the machine share one office
+
+## The interactive office (v0.3.0)
+
+Beyond the animated scene, the header now has **Leaderboard**, **Tiers**, and
+**Chat** buttons that open scrollable panels.
+
+### 🏆 Leaderboard — GitHub usernames only
+
+- Ranks users by cumulative **Ops** (currency earned per tool call).
+- **Only GitHub usernames ever appear** — agents, subagents, and non-logged-in
+  "local" rows are never shown. Connect a GitHub identity (⚙ in the header)
+  and your real username + avatar take the place of a generic row.
+- Rows show rank, tier icon, name (DEV badge for the owner), tool calls, time
+  ran, and Ops with their current tier.
+- Click a row for a full profile card (Ops, calls, sessions, time, agents).
+
+### 🪜 Tiers — all 500 IdleViber icons
+
+- A 500-rung ladder, one rung per tier icon (the full 001–500 IdleViber set).
+- Thresholds are cumulative Ops on an exponential curve: tier 1 = 0,
+  tier 24 ≈ 150, tier 100 ≈ 1.5k, tier 400 ≈ 690k, tier 500 = 5,000,000.
+- Your current rung is highlighted and scrolled into view.
+
+### 💬 Office Chat — P2P mesh
+
+- Broadcast chat to every other office on your GitHub network in real time.
+- Messages survive nobody being online (cached locally), with a gentle
+  two-note "ding" toggle.
+
+## How the leaderboard + chat work
+
+Scores and chat flow **only over WebRTC data channels** between browsers.
+GitHub is used purely to set your identity (username/avatar) and for the
+signaling handshake (presence + SDP offer/answer via the local plugin server
+and a GitHub gist), so peers can find each other. No score or chat message
+ever touches GitHub once channels open. This works across machines on the same
+LAN/network; behind strict CGNAT it may need a TURN server (the same
+limitation as IdleViber's mesh).
 
 Visual only: the plugin observes lifecycle hooks — it never blocks, vetoes,
 or transforms anything, adds zero model-tool footprint, and does not touch
@@ -45,6 +88,10 @@ open:
     http://127.0.0.1:8113
 
 Windows: same commands; the clone path is `%USERPROFILE%\.hermes\plugins\pixel-office`.
+
+> Note: to get the full v0.3.0 interactive office, install from
+> `DrGekoz/hermes-pixel-office-enhanced` (this repo) rather than the upstream
+> clone command above until the changes are merged upstream.
 
 ## VS Code
 
@@ -91,6 +138,9 @@ fail-open, microseconds. A daemon thread serves `web/index.html` (single
 canvas page, sprites drawn in code, zero dependencies) and `/state`, which
 folds the log into the current office snapshot. The log auto-trims at 512 KB.
 
+The frontend is a dependency-free single page: `web/index.html` + `web/p2p.js`
+(WebRTC mesh) + `web/tiers.js` (the 500-rung ladder, all icons in `web/icons/`).
+
 ## Troubleshooting
 
 - **"office unreachable" in the browser/extension** — check
@@ -106,6 +156,8 @@ folds the log into the current office snapshot. The log auto-trims at 512 KB.
   Exit and relaunch `hermes`; `/new` inside an old process is not enough.
   Verify with `hermes logs --level info | grep pixel-office` (Windows:
   `findstr /i pixel-office`) — you should see "registered" at session start.
+- **Panels open off-screen or don't scroll** — ensure your webview reports a
+  correct viewport height; the office area is height-constrained to fit.
 - **No `events.jsonl` appearing** — the same log now carries a WARNING line
   naming the exact exception if event writes fail.
 
