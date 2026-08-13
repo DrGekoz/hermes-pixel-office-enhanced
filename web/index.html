@@ -212,6 +212,10 @@
   .ed-tiercell .ed-tiernum{font-size:.58em;color:var(--sub);line-height:1}
   .ed-tiercell.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
   .ed-tiercell.sel .ed-tiernum{color:var(--accent)}
+  .ed-tiercell.locked{cursor:not-allowed;opacity:.35;filter:grayscale(1)}
+  .ed-tiercell.locked:hover{border-color:var(--borderDim);box-shadow:none}
+  .ed-tiercell.locked img{filter:grayscale(1) brightness(.5) opacity(.6)}
+  .ed-tiercell.locked .ed-tiernum{color:var(--sub)}
   .ed-theme-row{display:flex;align-items:center;gap:8px;margin:5px 0}
   .ed-theme-row label{flex:1;color:var(--text);font-size:.833em}
   .ed-theme-row input[type=color]{width:34px;height:24px;border:1px solid var(--border);border-radius:3px;
@@ -419,7 +423,7 @@ function ghAvatarFor(rowOrUser){
 }
 function rowTierIcon(r){
   if(r&&r.tierIcon)return r.tierIcon;
-  const t=(r&&r.tier)||(r?tierForOps(r.ops):null);
+  const t=(r&&r.tier)||(r?tierForOps(r.ops,r.tools,r.sessions):null);
   return t&&t.icon?t.icon:"";
 }
 function myGitHub(){return (state&&state.identity&&state.identity.github)?state.identity.github:"";}
@@ -460,7 +464,7 @@ function myCurrentTier(){
   if(!state||!state.identity)return null;
   const board=mergeBoards(currentBoard(),loadCachedBoard());
   const my=board.find(r=>isMe(r.id));
-  return my?(tierForOps(my.ops)||null):null;
+  return my?(tierForOps(my.ops,my.tools,my.sessions)||null):null;
 }
 function checkTierUnlock(){
   const t=myCurrentTier();
@@ -688,7 +692,7 @@ document.getElementById("gh-chip").onclick=()=>{
 // ── leaderboard ────────────────────────────────────────────────────────
 function tierRowHtml(r){
   const dev=isDev(r.github), me=isMe(r.id);
-  const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops)||{name:"—",icon:"",t:1});
+  const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops,r.tools,r.sessions)||{name:"—",icon:"",t:1});
   const tIcon=rowTierIcon(r)||tier.icon||"";
   return '<div class="lb-row'+(me?" me":"")+'" data-id="'+esc(r.id)+'">'+
     '<span class="lb-rank'+(r.rank<=3?" top":"")+'">'+r.rank+'</span>'+
@@ -744,7 +748,7 @@ function showProfile(id){
   const r=board.find(x=>x.id===id||x.github===id);
   if(!r)return;
   const dev=isDev(r.github), mine=isMine(r);
-  const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops)||{name:"—",icon:"",t:1});
+  const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops,r.tools,r.sessions)||{name:"—",icon:"",t:1});
   const tierIcon=rowTierIcon(r)||tier.icon||"";
   const avatar=ghAvatarFor(r);
   const theme=r.profileTheme||{};
@@ -868,10 +872,14 @@ function openEditProfile(r){
   document.getElementById("ed-bio").value=editBio;
 
   const pick=document.getElementById("ed-tierpick");
+  // Only tiers up to and including the user's current tier are unlocked.
+  const curTier=myTierName()||tierForOps(r.ops,r.tools,r.sessions);
+  const unlockedT=curTier?curTier.t:0;
   (window.OFFICE_TIERS||[]).forEach(t=>{
     const cell=document.createElement("div");
-    cell.className="ed-tiercell"+(t.icon===editTier?" sel":"");
-    cell.title=t.name+" (#"+t.t+")";
+    const locked=!(t.t<=unlockedT) && !(t.icon===editTier);
+    cell.className="ed-tiercell"+(t.icon===editTier?" sel":"")+(locked?" locked":"");
+    cell.title=(locked?("Locked - reach Tier #"+t.t+" ("+t.name+")"):(t.name+" (#"+t.t+")"));
     const im=document.createElement("img");
     im.src=iconPath(t.icon);
     im.alt="";
@@ -881,6 +889,7 @@ function openEditProfile(r){
     num.textContent="#"+(t.t);
     cell.appendChild(im);cell.appendChild(num);
     cell.onclick=()=>{
+      if(locked)return;
       editTier=t.icon;
       pick.querySelectorAll(".ed-tiercell").forEach(x=>x.classList.remove("sel"));
       cell.classList.add("sel");
@@ -955,19 +964,23 @@ function openEditProfile(r){
 }
 
 // ── tier ladder ────────────────────────────────────────────────────────
-function tierForOps(ops){
+function tierForOps(ops, calls, sessions){
   const list=(window.OFFICE_TIERS && window.OFFICE_TIERS.length)
     ? window.OFFICE_TIERS
     : (state && state.tiers ? state.tiers : []);
   let cur=list[0]||null;
-  for(const t of list){ if((t.ops||0)<=ops) cur=t; else break; }
+  for(const t of list){
+    if((t.ops||0)<=ops
+       && (t.calls||0)<=(calls||0)
+       && (t.sessions||0)<=(sessions||0)) cur=t; else break;
+  }
   return cur;
 }
 function myTierName(){
   if(!state||!state.identity)return null;
   const board=mergeBoards(currentBoard(),loadCachedBoard());
   const my=board.find(r=>isMe(r.id));
-  return my ? (tierForOps(my.ops) || my.tier) : null;
+  return my ? (tierForOps(my.ops,my.tools,my.sessions) || my.tier) : null;
 }
 function renderTiers(){
   const el=document.getElementById("tier-list");
@@ -995,10 +1008,10 @@ function renderTiers(){
   [...el.children].forEach((row,i)=>{
     const t=tiers[i];
     row.onmouseenter=()=>{
-      tip.innerHTML='<div class="tt-top"><img src="'+iconPathLarge(t.icon)+'" alt="" onerror="this.style.display=\'none\'">'+
+      tip.innerHTML='<div class="tt-top"><img src="'+iconPathLarge(t.icon)+'" alt="" onerror="this.onerror=null;this.src=\''+iconPath(t.icon)+'\';if(!this.complete){this.style.display=\'none\';}">'+
         '<div><div class="tt-name">'+esc(t.name)+'</div><div class="tt-num">Tier #'+t.t+'</div></div></div>'+
         '<div class="tt-req">Requires <b style="color:var(--accent)">'+fmtNum(t.ops)+'</b> Ops</div>'+
-        '<div class="tt-req">≈ '+fmtNum(tierCalls(t.ops))+' calls · ≈ '+fmtNum(tierSessions(t.ops))+' sessions</div>'+
+        '<div class="tt-req">'+fmtNum(t.calls||tierCalls(t.ops))+' calls · '+fmtNum(t.sessions||tierSessions(t.ops))+' sessions</div>'+
         '<div class="tt-mat">'+esc(t.material||"")+'</div>';
       tip.style.display="block";
     };
@@ -1080,7 +1093,7 @@ function renderChat(){
       const k=String(m.github||m.user||"").toLowerCase();
       const row=rowBy.get(k);
       if(row){
-        if(!m.tier)m.tier=row.tier||tierForOps(row.ops);
+        if(!m.tier)m.tier=row.tier||tierForOps(row.ops,row.tools,row.sessions);
         if(!m.tierIcon)m.tierIcon=rowTierIcon(row);
       }
     }

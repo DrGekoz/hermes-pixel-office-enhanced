@@ -693,12 +693,9 @@ def _short(text: Any, n: int = 60) -> str:
     return s[: n - 1] + "…" if len(s) > n else s
 
 
-def _tier_for_ops(ops: float) -> Dict[str, Any]:
-    """Return the highest tier whose threshold the cumulative Ops has reached.
-
-    Reads web/tiers.js (window.OFFICE_TIERS) if present; else a tiny fallback.
-    """
-    tiers = getattr(_tier_for_ops, "_cache", None)
+def _load_tiers() -> List[Dict[str, Any]]:
+    """Read (and cache) the tier ladder from web/tiers.js."""
+    tiers = getattr(_load_tiers, "_cache", None)
     if tiers is None:
         tiers = []
         try:
@@ -710,14 +707,31 @@ def _tier_for_ops(ops: float) -> Dict[str, Any]:
         except Exception:
             tiers = [{"t": 1, "ops": 0, "name": "Herald Plank",
                       "icon": "001_Wood_Heraldic_Shield_orig462"}]
-        _tier_for_ops._cache = tiers
+        _load_tiers._cache = tiers
+    return tiers
+
+
+def _tier_for_user(ops: float, calls: int, sessions: int) -> Dict[str, Any]:
+    """Return the highest tier whose Ops + calls + sessions thresholds are all met.
+
+    Reads web/tiers.js (window.OFFICE_TIERS) if present; else a tiny fallback.
+    """
+    tiers = _load_tiers()
     cur = tiers[0] if tiers else {"t": 1, "name": "—", "icon": ""}
     for t in tiers:
-        if float(t.get("ops", 0)) <= float(ops or 0):
+        if (float(t.get("ops", 0)) <= float(ops or 0)
+                and float(t.get("calls", 0)) <= float(calls or 0)
+                and float(t.get("sessions", 0)) <= float(sessions or 0)):
             cur = t
         else:
             break
     return cur
+
+
+def _tier_for_ops(ops: float) -> Dict[str, Any]:
+    """Back-compat: tier by Ops alone (warm the ladder cache / ops-only checks)."""
+    return _tier_for_user(ops, 0, 0)
+
 
 
 # Per-agent cumulative stats folded from the event log.
@@ -824,7 +838,7 @@ def _fold_leaderboard(events: List[Dict[str, Any]], registry: Dict[str, Dict[str
 
     rows = []
     for u in users.values():
-        u["tier"] = _tier_for_ops(u["ops"])
+        u["tier"] = _tier_for_user(u["ops"], u["tools"], u["sessions"])
         u["ops"] = round(u["ops"], 1)
         u["time_s"] = u["time_ms"] / 1000.0
         u["is_dev"] = u["github"].lower() == "drgekoz"
