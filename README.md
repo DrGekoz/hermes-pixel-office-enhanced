@@ -15,6 +15,10 @@ Companion VS Code extension: [hermes-pixel-office-vscode](https://github.com/tek
 
 > **v0.3.0** adds the interactive office: a GitHub-username leaderboard, a
 > 500-tier ladder, P2P office chat, and the full IdleViber icon set.
+>
+> **v0.4.0** adds editable user profiles + interface theming, tier gating
+> (calls/sessions requirements, locked icon picker, unlock modal), real Hermes
+> session counts from the state DB, and dark-background GitHub logo inversion.
 
 ## What you'll see
 
