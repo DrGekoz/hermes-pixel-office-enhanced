@@ -870,7 +870,7 @@ def _fold_leaderboard(events: List[Dict[str, Any]], registry: Dict[str, Dict[str
         u["tier"] = _tier_for_user(u["ops"], u["tools"], u["sessions"])
         u["ops"] = round(u["ops"], 1)
         u["time_s"] = u["time_ms"] / 1000.0
-        u["is_dev"] = u["github"].lower() == "drgekoz"
+        u["is_dev"] = u["github"].lower() in ("drgekoz", "teknium1", "jnorthrup")
         rows.append(u)
     rows.sort(key=lambda r: (r["ops"], r["tools"]), reverse=True)
     for rank, r in enumerate(rows, 1):
@@ -898,6 +898,34 @@ def _fold_leaderboard(events: List[Dict[str, Any]], registry: Dict[str, Dict[str
         "time_ms": g_time_ms, "users": len(rows),
     }
     return rows, global_stats
+
+
+def _model_leaderboard() -> List[Dict[str, Any]]:
+    """Read the jekyll-hyde per-model correction tally into a leaderboard.
+
+    Ranks MODELS (not people) by how many times Hyde had to correct them.
+    Sorted fewest-corrections first so the most-corrected model sinks to the
+    BOTTOM of the board — a model that keeps getting audited is a worse
+    citizen than one Hyde never has to correct. Falls back to [] when
+    jekyll-hyde hasn't recorded anything yet.
+    """
+    try:
+        jh_state = get_hermes_home() / "jekyll-hyde" / "model_corrections.json"
+        if not jh_state.exists():
+            return []
+        tally = json.loads(jh_state.read_text(encoding="utf-8"))
+        if not isinstance(tally, dict):
+            return []
+        rows = [
+            {"model": str(m) or "unknown", "corrections": int(c or 0)}
+            for m, c in tally.items()
+        ]
+        rows.sort(key=lambda r: (r["corrections"], r["model"]))  # fewest first
+        for rank, r in enumerate(rows, 1):
+            r["rank"] = rank
+        return rows
+    except Exception:
+        return []
 
 
 def _build_registry(ledger: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -1051,9 +1079,14 @@ def build_state() -> Dict[str, Any]:
     _tier_for_ops(0)
     tiers = getattr(_tier_for_ops, "_cache", None) or []
 
+    # Model Leaderboard — jekyll-hyde correction tallies (fewest first, so
+    # the most-corrected model sits at the bottom).
+    modelboard = _model_leaderboard()
+
     return {
         "agents": visible,
         "leaderboard": rows,
+        "modelboard": modelboard,
         "stats": global_stats,
         "identity": identity,
         "chat": chat,
@@ -1319,6 +1352,10 @@ def _serve() -> None:
                 elif path == "/state":
                     self._send_bytes(json.dumps(build_state()).encode("utf-8"),
                                      "application/json")
+                elif path == "/modelboard":
+                    self._send_bytes(
+                        json.dumps({"models": _model_leaderboard()}).encode("utf-8"),
+                        "application/json")
                 elif path == "/tiers.js":
                     body = (web_root / "tiers.js").read_bytes()
                     self._send_bytes(body, "text/javascript; charset=utf-8")

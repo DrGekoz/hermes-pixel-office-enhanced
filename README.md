@@ -20,9 +20,9 @@ Hermes' answer to "Pixel Agents" for Claude Code.
 
 ## The interactive office (v0.4.0)
 
-Beyond the animated scene, the header has **Leaderboard**, **Tiers**, **Chat**
-and **About** buttons that open scrollable panels. Click any user to open their
-profile; click **Edit Profile** to make it your own.
+Beyond the animated scene, the header has **Leaderboard**, **Tiers**, **Models**,
+**Chat** and **About** buttons that open scrollable panels. Click any user to
+open their profile; click **Edit Profile** to make it your own.
 
 ### 🏆 Leaderboard — GitHub usernames only
 
@@ -35,6 +35,18 @@ profile; click **Edit Profile** to make it your own.
 - Rows show rank, tier icon, name (gold **DEV** badge for the owner), tool
   calls, sessions, time ran, and Ops with their current tier.
 - Click a row for a full profile card.
+
+### 🤖 Model Leaderboard — jekyll-hyde corrections
+
+- Ranks **models** (not people) by how many times **Jekyll-Hyde** had to
+  correct them. Sorted fewest-corrections first, so the most-corrected model
+  sinks to the **bottom** of the board.
+- Jekyll-Hyde (a Hermes plugin by **jnorthrup**) runs a disposable two-clone
+  completion audit every few turns. Each time it activates against a model, a
+  correction is recorded against that model in
+  `~/.hermes/jekyll-hyde/model_corrections.json`. The office reads that tally
+  and renders it here.
+- View the same tally in-session with `/hyde corrections`.
 
 ### 🪜 Tiers — all 500 IdleViber icons
 
@@ -64,9 +76,9 @@ Every GitHub user can build a profile that travels with them across the office:
   profile popup when anyone views it. On dark profile backgrounds the GitHub
   logos auto-invert to white so they stay visible.
 - **Interface theme** — a full office-wide colour theme you can customise.
-- **DEV badge + rainbow theme** — the owner (`DrGekoz`) and the original author
-  (`teknium1`) get a gold **DEV** badge and an optional animated rainbow-border
-  profile theme.
+- **DEV badge + rainbow theme** — the owner (`DrGekoz`), the original author
+  (`teknium1`), and Jekyll-Hyde's creator (`jnorthrup`) get a gold **DEV**
+  badge and an optional animated rainbow-border profile theme.
 
 ### 🎨 Theme engine (v0.4.0)
 
@@ -95,8 +107,25 @@ consistently to every surface:
 
 ![About / credits](docs/screenshots/about.png)
 
-The About panel credits the original plugin (by **Teknium**) and the enhanced
-fork (by **DrGekoz**), with links to Hermes IdleViber and both repos.
+The About panel credits the original plugin (by **Teknium**), the enhanced
+fork (by **DrGekoz**), and **Jekyll-Hyde** (by **jnorthrup**), with links to
+Hermes IdleViber, the pixel-office repos, and the jekyll-hyde repo.
+
+---
+
+## Credits
+
+- **Teknium** — created the original **Hermes Pixel Office** plugin.
+  ([teknium1/hermes-pixel-office](https://github.com/teknium1/hermes-pixel-office))
+- **DrGekoz** — the **enhanced** fork: GitHub leaderboard, 500-tier ladder,
+  P2P chat, profiles & theming, and the **Model Leaderboard** integration.
+- **jnorthrup** (Jim Northrup) — creator of **Jekyll-Hyde**, the completion
+  auditor that powers the Model Leaderboard. Jekyll-Hyde audits agent sessions
+  off-stage every few turns with disposable clone reviewers, catches
+  reward-hacking (performative compliance, quota-spreading, "let it lie"
+  sloth), and drives verified next actions. ([jnorthrup/hermes-jekyl-hyde](https://github.com/jnorthrup/hermes-jekyl-hyde))
+
+All three are marked as **DEV** in the office.
 
 ---
 

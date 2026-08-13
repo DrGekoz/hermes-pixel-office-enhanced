@@ -75,6 +75,21 @@
   .lb-ops b{color:var(--accent)}
   .lb-ops .lbl{color:var(--sub);font-size:.833em;display:block}
   .lb-meta{color:var(--sub);font-size:.833em;flex-shrink:0;text-align:right}
+  /* model leaderboard (jekyll-hyde correction tallies) */
+  #mb{left:12px;top:12px;width:max-content;min-width:340px;max-width:94%;max-height:78%;bottom:auto}
+  #mb-list{overflow-y:auto;flex:1;min-height:0}
+  .mb-row{display:flex;align-items:center;gap:8px;padding:6px 10px;
+    border-bottom:1px solid var(--borderDim)}
+  .mb-rank{width:22px;color:var(--sub);font-weight:bold;flex-shrink:0}
+  .mb-rank.top{color:var(--accent)}
+  .mb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    color:var(--text)}
+  .mb-corr{text-align:right;flex-shrink:0}
+  .mb-corr b{color:var(--accent)}
+  .mb-corr .lbl{color:var(--sub);font-size:.833em;display:block}
+  .mb-badge{color:var(--green);font-size:.833em;border:1px solid var(--green);border-radius:3px;
+    padding:0 4px;flex-shrink:0}
+  .mb-empty{color:var(--sub);padding:12px;font-size:.833em;text-align:center}
   /* profile card */
   #prof{left:50%;top:50%;transform:translate(-50%,-50%);width:360px;pointer-events:auto;
     max-height:88%;overflow:auto}
@@ -368,6 +383,7 @@
     <span class="gh-chip" id="gh-chip" title="connect a GitHub identity">⚙ connect</span>
     <span class="btn" id="tiersBtn" title="tier ladder">Tiers</span>
     <span class="btn" id="lbBtn" title="leaderboard">Leaderboard</span>
+    <span class="btn" id="mbBtn" title="model leaderboard (jekyll-hyde corrections)">Models</span>
     <span class="btn" id="chatBtn" title="office chat">Chat</span>
     <span class="btn" id="aboutBtn" title="about & credits">About</span>
     <span class="btn" id="sound" title="chime when an agent needs approval or a subagent finishes">♪ sound off</span>
@@ -377,6 +393,7 @@
     <canvas id="c"></canvas>
     <div id="panel-holder">
       <div class="panel" id="lb"><div class="ptitle"><span>LEADERBOARD</span><span class="pclose" data-close="lb">✕</span></div><div id="lb-list"></div></div>
+      <div class="panel" id="mb"><div class="ptitle"><span>MODEL LEADERBOARD</span><span class="pclose" data-close="mb">✕</span></div><div id="mb-list"></div></div>
       <div class="panel" id="tiers"><div class="ptitle"><span>TIER LADDER</span><span class="pclose" data-close="tiers">✕</span></div><div id="tier-list"></div></div>
       <div class="panel" id="chat"><div class="ptitle"><span>OFFICE CHAT</span><span style="display:flex;align-items:center;gap:6px"><span class="csnd" id="chat-sound" title="chat message sound">♪ sound off</span><span class="pclose" data-close="chat">✕</span></span></div>
         <div id="chat-list"></div>
@@ -400,6 +417,11 @@
               <a class="ab-link" href="https://github.com/DrGekoz/Hermes-IdleViber" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> DrGekoz/Hermes-IdleViber</a>
               <a class="ab-link" href="https://github.com/DrGekoz" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> github.com/DrGekoz</a>
             </div>
+          </div>
+          <div class="ab-block">
+            <div class="ab-kicker">JEKYLL-HYDE — COMPLETION AUDITOR</div>
+            <p>This office ships with <b>Jekyll-Hyde</b>, a Hermes plugin by <b>jnorthrup</b> (Jim Northrup) that audits agent completion and drives verified next actions. Every few turns, disposable audit clones review the session off-stage, catch reward-hacking (performative compliance, quota-spreading, "let it lie" sloth), and name the smallest concrete continuation. Hyde only escalates on a directly observed placation-promise-goal-shift, never on inference. The <b>Model Leaderboard</b> (Models button) ranks models by how many times Hyde had to correct them — the most-corrected model sinks to the bottom.</p>
+            <div class="ab-links"><a class="ab-link" href="https://github.com/jnorthrup/hermes-jekyl-hyde" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> jnorthrup/hermes-jekyl-hyde</a></div>
           </div>
         </div>
       </div>
@@ -449,7 +471,7 @@ function iconPathLarge(name){return "icons/large/"+(name||"001_Wood_Heraldic_Shi
 function tierCalls(ops){return Math.ceil((Number(ops)||0)/2);}
 function tierSessions(ops){return Math.ceil(tierCalls(ops)/150);}
 function timeStr(ts){const d=new Date(ts*1000);return d.toTimeString().slice(0,5)}
-function isDev(g){return /^(drgekoz|teknium1)$/i.test(g||"")}
+function isDev(g){return /^(drgekoz|teknium1|jnorthrup)$/i.test(g||"")}
 function isMe(id){return state&&state.identity&&(id===state.identity.github||id===state.identity.name)}
 
 // ── link platforms + interface theming ────────────────────────────────
@@ -1001,11 +1023,13 @@ function togglePanel(id,force){
   if(force===true&&was)return; if(force===false&&!was)return;
   el.classList.toggle("open",force===undefined?!was:force);
   if(id==="lb")document.getElementById("lbBtn").classList.toggle("on",el.classList.contains("open"));
+  if(id==="mb")document.getElementById("mbBtn").classList.toggle("on",el.classList.contains("open"));
   if(id==="chat")document.getElementById("chatBtn").classList.toggle("on",el.classList.contains("open"));
   if(id==="tiers")document.getElementById("tiersBtn").classList.toggle("on",el.classList.contains("open"));
 }
 document.querySelectorAll(".pclose").forEach(b=>b.onclick=()=>togglePanel(b.dataset.close,false));
 document.getElementById("lbBtn").onclick=()=>togglePanel("lb");
+document.getElementById("mbBtn").onclick=()=>togglePanel("mb");
 document.getElementById("chatBtn").onclick=()=>togglePanel("chat");
 document.getElementById("tiersBtn").onclick=()=>togglePanel("tiers");
 document.getElementById("aboutBtn").onclick=()=>togglePanel("about");
@@ -1065,6 +1089,32 @@ function renderLeaderboard(){
   el.querySelectorAll(".lb-row").forEach(row=>{
     row.onclick=()=>showProfile(row.dataset.id);
   });
+}
+
+// ── model leaderboard (jekyll-hyde correction tallies) ─────────────────
+// Ranks MODELS by how many times Hyde had to correct them. The server
+// already sorts fewest-first, so the most-corrected model naturally sinks
+// to the BOTTOM of the board — a model that keeps getting audited is a
+// worse citizen than one Hyde never corrects.
+function renderModelBoard(){
+  const el=document.getElementById("mb-list");
+  if(!el)return;
+  const models=(state && state.modelboard) || [];
+  if(!models.length){
+    el.innerHTML='<div class="mb-empty">no model corrections yet — Hyde records a correction every time it has to audit a model</div>';
+    return;
+  }
+  const rows=models.map(r=>{
+    const top=r.rank<=3;
+    const clean=esc(r.model||"unknown");
+    return '<div class="mb-row">'+
+      '<span class="mb-rank'+(top?" top":"")+'">'+r.rank+'</span>'+
+      '<span class="mb-name">'+clean+'</span>'+
+      '<span class="mb-badge" style="'+(r.corrections<=0?'visibility:hidden':'')+'">corrected</span>'+
+      '<span class="mb-corr"><b>'+fmtNum(r.corrections)+'</b><span class="lbl">'+(r.corrections===1?'correction':'corrections')+'</span></span>'+
+      '</div>';
+  }).join("");
+  el.innerHTML=rows;
 }
 
 // ── profile card ───────────────────────────────────────────────────────
@@ -1909,6 +1959,7 @@ function applyState(st){
   syncP2P();
   renderIdentity();
   renderLeaderboard();
+  renderModelBoard();
   renderTiers();
   renderChat();
   saveCachedBoard(mergeBoards(currentBoard(),loadCachedBoard()));
