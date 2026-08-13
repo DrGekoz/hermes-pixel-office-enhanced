@@ -127,6 +127,9 @@ def _office_dir() -> Path:
 def _events_path() -> Path:
     return _office_dir() / "events.jsonl"
 
+def _baseline_path() -> Path:
+    return _office_dir() / "ops_baseline.json"
+
 
 def _ledger_path() -> Path:
     return _office_dir() / "ledger.jsonl"
@@ -656,12 +659,98 @@ def _maybe_trim(path: Path) -> None:
         if path.stat().st_size <= _MAX_LOG_BYTES:
             return
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if len(lines) <= 1:
+            return
+        drop = lines[:len(lines) // 2]
         keep = lines[len(lines) // 2:]
+        # Persist the trimmed-away events into a durable baseline so cumulative
+        # OPS/tools/sessions are never lost to the log cap.
+        _fold_events_into_baseline(drop)
         tmp = path.with_suffix(".jsonl.tmp")
         tmp.write_text("\n".join(keep) + "\n", encoding="utf-8")
         tmp.replace(path)
     except Exception:
         logger.debug("pixel-office trim failed", exc_info=True)
+
+
+def _load_baseline() -> Dict[str, Dict[str, Any]]:
+    path = _baseline_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_baseline(baseline: Dict[str, Dict[str, Any]]) -> None:
+    try:
+        tmp = _baseline_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(baseline, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(_baseline_path())
+    except Exception:
+        logger.debug("pixel-office baseline save failed", exc_info=True)
+
+
+def _fold_events_into_baseline(lines: List[str]) -> None:
+    """Fold a batch of dropped event lines into the persistent OPS baseline."""
+    baseline = _load_baseline()
+    last_tool_ts: Dict[str, float] = {}
+    session_open: Dict[str, float] = {}
+    session_count: Dict[str, int] = {k: int(v.get("sessions", 1)) for k, v in baseline.items()}
+    for raw in lines:
+        try:
+            ev = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        key = _agent_key(ev)
+        if not key:
+            continue
+        ts = float(ev.get("ts") or 0)
+        b = baseline.setdefault(key, {
+            "ops": 0.0, "tools": 0, "sessions": 0, "time_ms": 0.0,
+            "label": f"agent {key[-6:]}", "kind": "main",
+            "pid": str(ev.get("pid") or ""),
+            "first": ev.get("ts", time.time()), "last": ev.get("ts", time.time()),
+        })
+        if ev.get("pid"):
+            b["pid"] = str(ev["pid"])
+        b["last"] = max(b["last"], ts)
+        kind = ev.get("event")
+        if kind == "session_start":
+            b["label"] = f"{ev.get('platform') or 'hermes'} {key[-6:]}"
+            session_open[key] = ts
+            session_count[key] = session_count.get(key, 0) + 1
+        elif kind == "session_end":
+            if key in session_open:
+                b["time_ms"] += max(0.0, ts - session_open.pop(key)) * 1000.0
+        elif kind == "subagent_start":
+            b["kind"] = "subagent"
+            b["label"] = _short(ev.get("child_goal"), 26) or f"sub {key[-6:]}"
+        elif kind == "tool_start":
+            gap = ts - last_tool_ts.get(key, 0)
+            if gap > _SESSION_GAP_SECONDS and session_count.get(key, 0) == 0:
+                session_count[key] = session_count.get(key, 0) + 1
+            last_tool_ts[key] = ts
+        elif kind == "tool_end":
+            b["tools"] += 1
+            b["ops"] += _ops_for(ev.get("tool_name"))
+            gap = ts - last_tool_ts.get(key, 0)
+            if gap > _SESSION_GAP_SECONDS and session_count.get(key, 0) == 0:
+                session_count[key] = session_count.get(key, 0) + 1
+            last_tool_ts[key] = ts
+    # Close any sessions left open across the trim boundary.
+    for key, st in session_open.items():
+        if key in baseline:
+            baseline[key]["time_ms"] += max(0.0, time.time() - st) * 1000.0
+    for key, b in baseline.items():
+        b["sessions"] = session_count.get(key, b.get("sessions", 1))
+    _save_baseline(baseline)
 
 
 # ---------------------------------------------------------------------------
@@ -765,11 +854,16 @@ def _tier_for_ops(ops: float) -> Dict[str, Any]:
 
 # Per-agent cumulative stats folded from the event log.
 def _fold_agent_stats(events: List[Dict[str, Any]]):
-    """Return {agent_key: {ops, tools, sessions, time_ms, label, kind, first, last}}."""
-    stats: Dict[str, Dict[str, Any]] = {}
+    """Return {agent_key: {ops, tools, sessions, time_ms, label, kind, first, last}}.
+
+    Seeds from the durable OPS baseline (events previously trimmed from the log)
+    so cumulative scores never drop when events.jsonl is capped and rotated.
+    """
+    baseline = _load_baseline()
+    stats: Dict[str, Dict[str, Any]] = {k: dict(v) for k, v in baseline.items()}
     last_tool_ts: Dict[str, float] = {}
     session_open: Dict[str, float] = {}
-    session_count: Dict[str, int] = {}
+    session_count: Dict[str, int] = {k: int(v.get("sessions", 1)) for k, v in baseline.items()}
 
     for ev in events:
         kind = ev.get("event")

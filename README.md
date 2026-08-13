@@ -210,7 +210,9 @@ Hook callbacks (`pre/post_tool_call`, `subagent_start/stop`,
 append one JSON line each to `~/.hermes/pixel-office/events.jsonl` — O(1),
 fail-open, microseconds. A daemon thread serves `web/index.html` (single
 canvas page, sprites drawn in code, zero dependencies) and `/state`, which
-folds the log into the current office snapshot. The log auto-trims at 512 KB.
+folds the log into the current office snapshot. The log auto-trims at 512 KB;
+events trimmed away are folded into a durable `ops_baseline.json` so
+cumulative OPS/tools/sessions are never lost to the cap.
 
 The frontend is a dependency-free single page: `web/index.html` + `web/p2p.js`
 (WebRTC mesh) + `web/tiers.js` (the 500-rung ladder, all icons in `web/icons/`).
