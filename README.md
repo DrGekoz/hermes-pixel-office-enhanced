@@ -1,68 +1,104 @@
-# Hermes Pixel Office ☤
+# Hermes Pixel Office Enhanced ☤
 
 A pixel-art virtual office for [Hermes Agent](https://github.com/NousResearch/hermes-agent) —
 every agent session and every `delegate_task` subagent becomes an animated
 pixel character at a desk. Watch tools fire, subagents spawn and finish,
 approval requests flag you visually, and — with a GitHub login — compete on a
-live leaderboard and chat with other offices, all in your browser or VS Code.
+live leaderboard, climb a 500-rung tier ladder, chat with other offices, and
+style your own profile, all in your browser or VS Code.
 
 Hermes' answer to "Pixel Agents" for Claude Code.
 
-![office](screenshot.png)
+> This is the **enhanced** fork (by DrGekoz) built on top of Teknium's original
+> plugin. It adds the full interactive office: a GitHub leaderboard, a 500-tier
+> ladder, P2P office chat, editable profiles, a deep theming system, tier
+> gating, and much more.
 
-Companion VS Code extension: [hermes-pixel-office-vscode](https://github.com/teknium1/hermes-pixel-office-vscode)
-(this plugin works standalone in any browser — the extension is optional).
+![Profiles — the profile popup with rank, tier, bio, links and live agent roster](docs/screenshots/profiles.png)
 
-> **v0.3.0** adds the interactive office: a GitHub-username leaderboard, a
-> 500-tier ladder, P2P office chat, and the full IdleViber icon set.
->
-> **v0.4.0** adds editable user profiles + interface theming, tier gating
-> (calls/sessions requirements, locked icon picker, unlock modal), real Hermes
-> session counts from the state DB, and dark-background GitHub logo inversion.
+---
 
-## What you'll see
+## The interactive office (v0.4.0)
 
-- One character per Hermes session (CLI, Telegram, Discord, cron, ...) —
-  characters walk in through the door, sit at a desk, and walk out when the
-  session ends
-- Gold-collared characters are `delegate_task` subagents, labeled by goal
-- Activity animations: typing (`write_file`/`patch`), reading a book
-  (`read_file`/`search_files`), browsing (web tools), terminal work (green
-  monitor flicker), delegating (pointing)
-- Dangerous-command approvals: red "!" speech bubble + "needs input!" +
-  header counter ("N waiting!")
-- Header stats strip: live **Ops**, tool calls, sessions, and total time ran
-- Optional sound: chime when an agent needs approval or a subagent finishes
-  (♪ toggle in the header, off by default, persists)
-- Sessions from ALL Hermes processes on the machine share one office
-
-## The interactive office (v0.3.0)
-
-Beyond the animated scene, the header now has **Leaderboard**, **Tiers**, and
-**Chat** buttons that open scrollable panels.
+Beyond the animated scene, the header has **Leaderboard**, **Tiers**, **Chat**
+and **About** buttons that open scrollable panels. Click any user to open their
+profile; click **Edit Profile** to make it your own.
 
 ### 🏆 Leaderboard — GitHub usernames only
 
+![Leaderboard](docs/screenshots/leaderboard.png)
+
 - Ranks users by cumulative **Ops** (currency earned per tool call).
 - **Only GitHub usernames ever appear** — agents, subagents, and non-logged-in
-  "local" rows are never shown. Connect a GitHub identity (⚙ in the header)
-  and your real username + avatar take the place of a generic row.
-- Rows show rank, tier icon, name (DEV badge for the owner), tool calls, time
-  ran, and Ops with their current tier.
-- Click a row for a full profile card (Ops, calls, sessions, time, agents).
+  "local" rows are never shown. Connect a GitHub identity (⚙ in the header) and
+  your real username + avatar take the place of a generic row.
+- Rows show rank, tier icon, name (gold **DEV** badge for the owner), tool
+  calls, sessions, time ran, and Ops with their current tier.
+- Click a row for a full profile card.
 
 ### 🪜 Tiers — all 500 IdleViber icons
 
+![Tier ladder](docs/screenshots/tiers.png)
+
 - A 500-rung ladder, one rung per tier icon (the full 001–500 IdleViber set).
-- Thresholds are cumulative Ops on an exponential curve: tier 1 = 0,
+- Thresholds are cumulative **Ops** on an exponential curve: tier 1 = 0,
   tier 24 ≈ 150, tier 100 ≈ 1.5k, tier 400 ≈ 690k, tier 500 = 5,000,000.
+- **Tier gating (v0.4.0):** rungs also carry **calls** and **sessions**
+  requirements alongside Ops. Locked tiers show a padlock; hovering a locked
+  icon reveals what's still missing. Click an unlocked tier to set it as your
+  displayed tier icon (picking a locked one opens the **Unlock Modal** instead).
 - Your current rung is highlighted and scrolled into view.
 
+### 👤 Profiles & themes (v0.4.0)
+
+![Edit profile](docs/screenshots/edit-profile.png)
+
+Every GitHub user can build a profile that travels with them across the office:
+
+- **Bio** — a short description shown on your profile card.
+- **Links** — an ordered, drag-and-drop list of social/repo links across
+  platforms (GitHub, GitHub Repos, YouTube, Reddit, Spotify, SoundCloud,
+  Discord, Steam). Your GitHub link is pre-filled automatically if you're
+  logged in.
+- **Profile theme** — a per-user accent colour + background applied to your
+  profile popup when anyone views it. On dark profile backgrounds the GitHub
+  logos auto-invert to white so they stay visible.
+- **Interface theme** — a full office-wide colour theme you can customise.
+- **DEV badge + rainbow theme** — the owner (`DrGekoz`) and the original author
+  (`teknium1`) get a gold **DEV** badge and an optional animated rainbow-border
+  profile theme.
+
+### 🎨 Theme engine (v0.4.0)
+
+The office is fully themeable. Themes are built from palettes and applied
+consistently to every surface:
+
+- **10 colour series** (Scarlet, Ember, Sunflare, Emerald, Frost, Lagoon,
+  Azure, Orchid, Neon, Amethyst) plus **12 multi-colour palettes** (Synthwave,
+  Cyberpunk, Ocean, Forest, Candy, Sunset, Matrix, Midnight, Royal, Slate,
+  Emberglow, Mint).
+- Each surface is themed independently with its own preset dropdown: **main
+  interface**, **leaderboard**, **chat**, **canvas** (floor/walls/windows/desks),
+  **pixel agents** (shirt + hair colours), and **other**.
+- Every section gets the generated colour series via `shadeHex()`/`buildTheme()`.
+- Live preview while the Edit panel is open; ✕ reverts to your saved theme.
+
 ### 💬 Office Chat — P2P mesh
+
+![Office chat](docs/screenshots/chat.png)
 
 - Broadcast chat to every other office on your GitHub network in real time.
 - Messages survive nobody being online (cached locally), with a gentle
   two-note "ding" toggle.
+
+### ℹ️ About / Credits
+
+![About / credits](docs/screenshots/about.png)
+
+The About panel credits the original plugin (by **Teknium**) and the enhanced
+fork (by **DrGekoz**), with links to Hermes IdleViber and both repos.
+
+---
 
 ## How the leaderboard + chat work
 
@@ -74,6 +110,10 @@ ever touches GitHub once channels open. This works across machines on the same
 LAN/network; behind strict CGNAT it may need a TURN server (the same
 limitation as IdleViber's mesh).
 
+**Sessions** are reported from Hermes' real session store (`state.db`, cached
+~20s) rather than only the events observed while the plugin was running, so
+your session count matches what Hermes Desktop shows.
+
 Visual only: the plugin observes lifecycle hooks — it never blocks, vetoes,
 or transforms anything, adds zero model-tool footprint, and does not touch
 the prompt cache.
@@ -81,7 +121,7 @@ the prompt cache.
 ## Install
 
 ```bash
-git clone https://github.com/teknium1/hermes-pixel-office ~/.hermes/plugins/pixel-office
+git clone https://github.com/DrGekoz/hermes-pixel-office-enhanced ~/.hermes/plugins/pixel-office
 hermes plugins enable pixel-office
 ```
 
@@ -92,10 +132,6 @@ open:
     http://127.0.0.1:8113
 
 Windows: same commands; the clone path is `%USERPROFILE%\.hermes\plugins\pixel-office`.
-
-> Note: to get the full v0.3.0 interactive office, install from
-> `DrGekoz/hermes-pixel-office-enhanced` (this repo) rather than the upstream
-> clone command above until the changes are merged upstream.
 
 ## VS Code
 
@@ -144,6 +180,10 @@ folds the log into the current office snapshot. The log auto-trims at 512 KB.
 
 The frontend is a dependency-free single page: `web/index.html` + `web/p2p.js`
 (WebRTC mesh) + `web/tiers.js` (the 500-rung ladder, all icons in `web/icons/`).
+
+Frontend edits (index.html, tiers.js) are served fresh from disk — a
+hard-refresh in the browser picks them up with no server restart. Backend
+(`__init__.py`) changes require a Hermes restart.
 
 ## Troubleshooting
 
