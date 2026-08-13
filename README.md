@@ -36,16 +36,19 @@ open their profile; click **Edit Profile** to make it your own.
   calls, sessions, time ran, and Ops with their current tier.
 - Click a row for a full profile card.
 
-### 🤖 Model Leaderboard — jekyll-hyde corrections
+### 🤖 Model Leaderboard — jekyll-hyde audit data
 
-- Ranks **models** (not people) by how many times **Jekyll-Hyde** had to
-  correct them. Sorted fewest-corrections first, so the most-corrected model
-  sinks to the **bottom** of the board.
-- Jekyll-Hyde (a Hermes plugin by **jnorthrup**) runs a disposable two-clone
-  completion audit every few turns. Each time it activates against a model, a
-  correction is recorded against that model in
-  `~/.hermes/jekyll-hyde/model_corrections.json`. The office reads that tally
-  and renders it here.
+- Ranks **models** (not people) by how much **Jekyll-Hyde** has had to correct
+  them. Sorted fewest-corrections first, so the most-corrected model sinks to
+  the **bottom** of the board.
+- **pixel-office supports the audit engine — it doesn't bundle it.** It reads
+  whatever jekyll-hyde has written and never fabricates data. Each row shows
+  more than a raw count: **corrections**, **sandbagged / genuine / uncertain**
+  verdicts, **escalations**, and **last-corrected** time.
+- If jekyll-hyde isn't installed, the panel shows a **"To contribute, download
+  Jekyll-Hyde"** link straight to the plugin repo.
+- The modelboard also **rides the P2P score packets**, so peers' audit data
+  merges into one shared board across machines.
 - View the same tally in-session with `/hyde corrections`.
 
 ### 🪜 Tiers — all 500 IdleViber icons
@@ -120,10 +123,12 @@ Hermes IdleViber, the pixel-office repos, and the jekyll-hyde repo.
 - **DrGekoz** — the **enhanced** fork: GitHub leaderboard, 500-tier ladder,
   P2P chat, profiles & theming, and the **Model Leaderboard** integration.
 - **jnorthrup** (Jim Northrup) — creator of **Jekyll-Hyde**, the completion
-  auditor that powers the Model Leaderboard. Jekyll-Hyde audits agent sessions
+  auditor the Model Leaderboard reads from. Jekyll-Hyde audits agent sessions
   off-stage every few turns with disposable clone reviewers, catches
   reward-hacking (performative compliance, quota-spreading, "let it lie"
-  sloth), and drives verified next actions. ([jnorthrup/hermes-jekyl-hyde](https://github.com/jnorthrup/hermes-jekyl-hyde))
+  sloth), and drives verified next actions. pixel-office *supports* it — install
+  it to contribute audit data to the Model Leaderboard.
+  ([jnorthrup/hermes-jekyl-hyde](https://github.com/jnorthrup/hermes-jekyl-hyde))
 
 All three are marked as **DEV** in the office.
 

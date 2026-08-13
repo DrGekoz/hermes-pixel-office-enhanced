@@ -83,6 +83,9 @@ window.PixelOfficeP2P = (function () {
       profileTheme: serverRow.profileTheme || {},
       interfaceTheme: serverRow.interfaceTheme || {},
       agents: serverRow.agents || [],
+      // modelboard rides the score packet so peers see each other's
+      // jekyll-hyde audit data (model corrections) on a shared board.
+      modelboard: serverRow.modelboard || null,
       counter: ++entryCounter,
       ts: Date.now(),
     };
@@ -278,6 +281,7 @@ window.PixelOfficeP2P = (function () {
         bio: e.bio || "", links: e.links || {}, tierIcon: e.tierIcon || "",
         profileTheme: e.profileTheme || {}, interfaceTheme: e.interfaceTheme || {},
         agents: e.agents || [],
+        modelboard: e.modelboard || null,
       });
     });
     rows.sort(function (a, b) { return (b.ops - a.ops) || (b.tools - a.tools); });

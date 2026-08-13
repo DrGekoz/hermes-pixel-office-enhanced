@@ -1,5 +1,5 @@
 name: pixel-office
-version: "0.5.0"
+version: "0.6.0"
 description: "Pixel-art virtual office for Hermes — every agent and subagent becomes an animated pixel character at a desk. Live office with a GitHub-username leaderboard, 500-tier ladder, P2P office chat, approvals, and sounds. Visual only; observes lifecycle hooks, never blocks or transforms anything."
 author: "NousResearch"
 hooks:

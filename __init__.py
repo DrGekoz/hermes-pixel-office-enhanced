@@ -900,32 +900,115 @@ def _fold_leaderboard(events: List[Dict[str, Any]], registry: Dict[str, Dict[str
     return rows, global_stats
 
 
-def _model_leaderboard() -> List[Dict[str, Any]]:
-    """Read the jekyll-hyde per-model correction tally into a leaderboard.
+def _read_jekyll_hyde_state():
+    """Read jekyll-hyde's shared state dir (dict with keys, or None).
 
-    Ranks MODELS (not people) by how many times Hyde had to correct them.
-    Sorted fewest-corrections first so the most-corrected model sinks to the
-    BOTTOM of the board — a model that keeps getting audited is a worse
-    citizen than one Hyde never has to correct. Falls back to [] when
-    jekyll-hyde hasn't recorded anything yet.
+    pixel-office only *supports* the audit engine — it reads whatever
+    jekyll-hyde has written and never fabricates data. If the plugin isn't
+    installed (no state dir / files), every field returns empty and the
+    frontend shows the "contribute" call-to-action instead.
     """
+    jh = get_hermes_home() / "jekyll-hyde"
+    out = {"present": False, "corrections": {}, "activations": []}
     try:
-        jh_state = get_hermes_home() / "jekyll-hyde" / "model_corrections.json"
-        if not jh_state.exists():
-            return []
-        tally = json.loads(jh_state.read_text(encoding="utf-8"))
-        if not isinstance(tally, dict):
-            return []
-        rows = [
-            {"model": str(m) or "unknown", "corrections": int(c or 0)}
-            for m, c in tally.items()
-        ]
-        rows.sort(key=lambda r: (r["corrections"], r["model"]))  # fewest first
-        for rank, r in enumerate(rows, 1):
-            r["rank"] = rank
-        return rows
+        if jh.is_dir():
+            out["present"] = True
+            tally = jh / "model_corrections.json"
+            if tally.exists():
+                d = json.loads(tally.read_text(encoding="utf-8"))
+                if isinstance(d, dict):
+                    out["corrections"] = d
+            act = jh / "activations.jsonl"
+            if act.exists():
+                for line in act.read_text(encoding="utf-8", errors="replace").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        if isinstance(rec, dict):
+                            out["activations"].append(rec)
+                    except Exception:
+                        continue
     except Exception:
-        return []
+        pass
+    return out
+
+
+def _model_leaderboard() -> Dict[str, Any]:
+    """Aggregate jekyll-hyde audit data into a rich Model Leaderboard.
+
+    Ranks MODELS (not people) by how much Hyde has had to correct them.
+    Sorted fewest-corrections first, so the most-corrected model sinks to
+    the BOTTOM. Each row carries more than a raw count:
+
+      corrections      — total activations (times Hyde audited this model)
+      sandbagged       — verdicts where the model's confession was judged evasive
+      genuine          — verdicts judged genuine (caught up, real progress)
+      uncertain        — verdicts the arbiter couldn't decide
+      escalated        — times a placation-promise-goal-shift episode was seen
+      last_corrected   — epoch ts of the most recent activation for this model
+      streak           — consecutive corrections (how many audits since last genuine)
+
+    When jekyll-hyde isn't installed (present=False) we return an empty board
+    and let the frontend point users at the plugin so they can contribute.
+    """
+    state = _read_jekyll_hyde_state()
+    if not state["present"]:
+        return {"models": [], "installed": False}
+
+    tally = {str(k): int(v or 0) for k, v in state["corrections"].items()}
+    agg: Dict[str, Dict[str, Any]] = {}
+    for m in tally:
+        agg[m] = {
+            "model": m, "corrections": 0,
+            "sandbagged": 0, "genuine": 0, "uncertain": 0, "escalated": 0,
+            "last_corrected": 0.0, "streak": 0,
+        }
+
+    # Fold activation records (they carry verdict + model + ts) into the tally.
+    for rec in state["activations"]:
+        m = str(rec.get("model") or "unknown")
+        row = agg.setdefault(m, {
+            "model": m, "corrections": 0,
+            "sandbagged": 0, "genuine": 0, "uncertain": 0, "escalated": 0,
+            "last_corrected": 0.0, "streak": 0,
+        })
+        row["corrections"] += 1
+        verdict = str(rec.get("verdict") or "uncertain")
+        if verdict == "sandbagged":
+            row["sandbagged"] += 1
+        elif verdict == "genuine":
+            row["genuine"] += 1
+        else:
+            row["uncertain"] += 1
+        if rec.get("escalated"):
+            row["escalated"] += 1
+        ts = float(rec.get("ts") or 0)
+        if ts > row["last_corrected"]:
+            row["last_corrected"] = ts
+
+    # Streak: consecutive activations since the last genuine verdict, per model.
+    for rec in state["activations"]:
+        m = str(rec.get("model") or "unknown")
+        row = agg.get(m)
+        if row is None:
+            continue
+        if str(rec.get("verdict") or "uncertain") == "genuine":
+            row["streak"] = 0
+        else:
+            row["streak"] += 1
+
+    rows = list(agg.values())
+    # Leaderboard logic: fewest corrections first; ties broken by fewer
+    # sandbagged verdicts, then fewer escalations, then name. So the model
+    # Hyde has corrected most (and/or caught evading most) ranks last.
+    rows.sort(key=lambda r: (
+        r["corrections"], r["sandbagged"], r["escalated"], r["model"]
+    ))
+    for rank, r in enumerate(rows, 1):
+        r["rank"] = rank
+    return {"models": rows, "installed": True}
 
 
 def _build_registry(ledger: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -1354,7 +1437,7 @@ def _serve() -> None:
                                      "application/json")
                 elif path == "/modelboard":
                     self._send_bytes(
-                        json.dumps({"models": _model_leaderboard()}).encode("utf-8"),
+                        json.dumps(_model_leaderboard()).encode("utf-8"),
                         "application/json")
                 elif path == "/tiers.js":
                     body = (web_root / "tiers.js").read_bytes()

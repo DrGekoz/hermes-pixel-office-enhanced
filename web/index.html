@@ -89,7 +89,15 @@
   .mb-corr .lbl{color:var(--sub);font-size:.833em;display:block}
   .mb-badge{color:var(--green);font-size:.833em;border:1px solid var(--green);border-radius:3px;
     padding:0 4px;flex-shrink:0}
+  .mb-break{display:flex;flex-direction:column;gap:1px;align-items:flex-end;flex-shrink:0}
+  .mb-ver{font-size:.75em;color:var(--sub);white-space:nowrap}
+  .mb-ver.sbg{color:#d84f6f}
+  .mb-ver.gen{color:var(--green)}
+  .mb-ver.unc{color:var(--sub)}
   .mb-empty{color:var(--sub);padding:12px;font-size:.833em;text-align:center}
+  .mb-cta{padding:10px 12px;border-top:1px solid var(--borderDim);text-align:center}
+  .mb-cta .ab-link{display:inline-flex;align-items:center;gap:6px;color:var(--accent);
+    background:var(--panel2);padding:6px 10px;border-radius:3px;font-size:.833em}
   /* profile card */
   #prof{left:50%;top:50%;transform:translate(-50%,-50%);width:360px;pointer-events:auto;
     max-height:88%;overflow:auto}
@@ -420,7 +428,7 @@
           </div>
           <div class="ab-block">
             <div class="ab-kicker">JEKYLL-HYDE — COMPLETION AUDITOR</div>
-            <p>This office ships with <b>Jekyll-Hyde</b>, a Hermes plugin by <b>jnorthrup</b> (Jim Northrup) that audits agent completion and drives verified next actions. Every few turns, disposable audit clones review the session off-stage, catch reward-hacking (performative compliance, quota-spreading, "let it lie" sloth), and name the smallest concrete continuation. Hyde only escalates on a directly observed placation-promise-goal-shift, never on inference. The <b>Model Leaderboard</b> (Models button) ranks models by how many times Hyde had to correct them — the most-corrected model sinks to the bottom.</p>
+            <p>This office has built-in <b>support</b> for <b>Jekyll-Hyde</b>, a Hermes plugin by <b>jnorthrup</b> (Jim Northrup) that audits agent completion and drives verified next actions. Install it to start feeding the <b>Model Leaderboard</b> (Models button), which ranks models by how much Hyde has had to correct them — the most-corrected model sinks to the bottom. Each row shows the sandbagged / genuine / uncertain verdict breakdown. The board rides the P2P mesh, so peers' audit data merges in.</p>
             <div class="ab-links"><a class="ab-link" href="https://github.com/jnorthrup/hermes-jekyl-hyde" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> jnorthrup/hermes-jekyl-hyde</a></div>
           </div>
         </div>
@@ -1056,7 +1064,9 @@ function tierRowHtml(r){
 // ── merged leaderboard (local live score + P2P peer scores) ────────────
 const LS_BOARD = "pixelOfficeBoard";
 function localRow(){
-  return (state && state.leaderboard && state.leaderboard[0]) || null;
+  const r=(state && state.leaderboard && state.leaderboard[0]) || null;
+  if(r) r.modelboard = (state && state.modelboard) || null;
+  return r;
 }
 function currentBoard(){
   if(window.PixelOfficeP2P && PixelOfficeP2P.isStarted()){
@@ -1091,30 +1101,84 @@ function renderLeaderboard(){
   });
 }
 
-// ── model leaderboard (jekyll-hyde correction tallies) ─────────────────
-// Ranks MODELS by how many times Hyde had to correct them. The server
-// already sorts fewest-first, so the most-corrected model naturally sinks
-// to the BOTTOM of the board — a model that keeps getting audited is a
-// worse citizen than one Hyde never corrects.
+// ── model leaderboard (jekyll-hyde audit data) ────────────────────────
+// Ranks MODELS by how much Hyde has had to correct them. The server sorts
+// fewest-first, so the most-corrected model sinks to the BOTTOM. Each row
+// shows the audit breakdown (sandbagged / genuine / uncertain) plus a streak.
+// pixel-office only SUPPORTS the audit engine — if jekyll-hyde isn't
+// installed we show a CTA linking to the plugin so people can contribute.
+const JH_REPO = "https://github.com/jnorthrup/hermes-jekyl-hyde";
+// Merge this machine's local modelboard with every peer's modelboard that
+// arrived over the P2P score packets into a single shared Model Leaderboard.
+// A model's corrections are summed across contributors (it's the same model
+// name everywhere), and the board is re-sorted fewest-first so the
+// most-corrected model sinks to the bottom.
+function mergedModelBoard(){
+  const local=(state && state.modelboard) || {};
+  const rows=new Map();
+  const all=[local].concat(
+    currentBoard().map(function(r){return r.modelboard||null}).filter(Boolean)
+  );
+  all.forEach(function(mb){
+    if(!mb || !mb.installed)return;
+    (mb.models||[]).forEach(function(r){
+      const cur=rows.get(r.model);
+      if(cur){
+        cur.corrections+=r.corrections; cur.sandbagged+=r.sandbagged;
+        cur.genuine+=r.genuine; cur.uncertain+=r.uncertain; cur.escalated+=r.escalated;
+        if(r.last_corrected>cur.last_corrected)cur.last_corrected=r.last_corrected;
+        cur.streak+=r.streak;
+      }else{
+        rows.set(r.model,Object.assign({},r));
+      }
+    });
+  });
+  const out=[...rows.values()];
+  out.sort(function(a,b){
+    return (a.corrections-b.corrections)||(a.sandbagged-b.sandbagged)||
+           (a.escalated-b.escalated)||String(a.model).localeCompare(String(b.model));
+  });
+  out.forEach(function(r,i){r.rank=i+1;});
+  return {installed: rows.size>0, models:out};
+}
 function renderModelBoard(){
   const el=document.getElementById("mb-list");
   if(!el)return;
-  const models=(state && state.modelboard) || [];
+  const mb=mergedModelBoard();
+  const installed=mb.installed;
+  const models=mb.models || [];
+  if(!installed){
+    el.innerHTML='<div class="mb-empty">The Model Leaderboard is powered by the Jekyll-Hyde audit engine — install it to start recording corrections.</div>'+
+      '<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> To contribute, download Jekyll-Hyde</a></div>';
+    return;
+  }
   if(!models.length){
-    el.innerHTML='<div class="mb-empty">no model corrections yet — Hyde records a correction every time it has to audit a model</div>';
+    el.innerHTML='<div class="mb-empty">Jekyll-Hyde is installed but hasn\'t audited a model yet — it records a correction every time it activates.</div>'+
+      '<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> Jekyll-Hyde</a></div>';
     return;
   }
   const rows=models.map(r=>{
     const top=r.rank<=3;
     const clean=esc(r.model||"unknown");
+    const last=r.last_corrected?' · '+timeAgo(r.last_corrected):'';
     return '<div class="mb-row">'+
       '<span class="mb-rank'+(top?" top":"")+'">'+r.rank+'</span>'+
       '<span class="mb-name">'+clean+'</span>'+
-      '<span class="mb-badge" style="'+(r.corrections<=0?'visibility:hidden':'')+'">corrected</span>'+
-      '<span class="mb-corr"><b>'+fmtNum(r.corrections)+'</b><span class="lbl">'+(r.corrections===1?'correction':'corrections')+'</span></span>'+
+      '<span class="mb-break"><span class="mb-ver sbg">'+fmtNum(r.sandbagged)+' sandbag</span>'+
+        '<span class="mb-ver gen">'+fmtNum(r.genuine)+' genuine</span>'+
+        '<span class="mb-ver unc">'+fmtNum(r.uncertain)+' ?</span></span>'+
+      '<span class="mb-corr"><b>'+fmtNum(r.corrections)+'</b><span class="lbl">'+(r.corrections===1?'correction':'corrections')+(last||'')+'</span></span>'+
       '</div>';
   }).join("");
-  el.innerHTML=rows;
+  const foot='<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> To contribute, download Jekyll-Hyde</a></div>';
+  el.innerHTML=rows+foot;
+}
+function timeAgo(ts){
+  const s=Math.floor((Date.now()/1000)-ts);
+  if(s<60)return "just now";
+  if(s<3600)return Math.floor(s/60)+"m ago";
+  if(s<86400)return Math.floor(s/3600)+"h ago";
+  return Math.floor(s/86400)+"d ago";
 }
 
 // ── profile card ───────────────────────────────────────────────────────
@@ -1860,7 +1924,7 @@ if(window.PixelOfficeP2P){
     renderChat();
   });
   PixelOfficeP2P.onScore(()=>{
-    renderLeaderboard(); renderTiers();
+    renderLeaderboard(); renderModelBoard(); renderTiers();
     saveCachedBoard(mergeBoards(currentBoard(),loadCachedBoard()));
   });
 }
