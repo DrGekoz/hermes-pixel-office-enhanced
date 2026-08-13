@@ -3,13 +3,24 @@
 <head>
 <meta charset="utf-8">
 <title>Hermes Pixel Office</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;700&family=DotGothic16&family=Rubik+Pixel&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#1a1423; --panel:#221a2e; --panel2:#241c30; --panelHover:#2a2138;
     --border:#3a2f4b; --borderDim:#2c2340; --rowMe:#2a2438; --rowCurrent:#33291a;
     --accent:#e8c170; --text:#cfc4e8; --sub:#7a6f8f; --green:#5fce7a;
     --dev:#ffd700; --link:#7fa8d8; --linkHover:#a8c8e8; --danger:#d84f6f;
+    --chip:#7fa8d8; --on:#5fce7a;
     --scroll:#4a3f63; --time:#555;
+    /* canvas / office-scene palette */
+    --cvFloor:#2a2138; --cvFloorAlt:#251d31; --cvWall:#3a2f4b; --cvWallTrim:#241c30;
+    --cvWindow:#151022; --cvWindowGlass:#3b5a8f; --cvWindowGlow:#7fa8d8;
+    --cvDesk:#6b4a2f; --cvDeskDark:#54381f; --cvDeskLeg:#3c2814; --cvMonitor:#191524;
+    --cvScreen:#0f2c1e; --cvPlant:#5fce7a; --cvPlantDark:#4aa860; --cvPot:#8d5524;
+    /* pixel-agent palette (base hues; per-agent variety derived from these) */
+    --agSkin:#f0c8a0; --agShirt:#4fa4d8; --agHair:#2b2b2b;
     --font:ui-monospace,Menlo,Consolas,monospace; --fs:12px;
   }
   html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
@@ -23,7 +34,7 @@
     border-radius:3px;padding:2px 8px;font-size:1em;background:var(--panel2);
     user-select:none}
   #hdr .btn:hover{border-color:var(--accent);color:var(--accent)}
-  #hdr .btn.on{color:var(--green);border-color:var(--green)}
+  #hdr .btn.on{color:var(--on);border-color:var(--on)}
   /* stats strip — sits left of the "N agents" count, same font */
   #stats{display:flex;align-items:center;gap:12px;font-size:1em;
     letter-spacing:0.5px;color:var(--text);white-space:nowrap}
@@ -89,6 +100,14 @@
   .pc-ghlink{display:inline-flex;align-items:center;gap:4px;color:var(--link);
     text-decoration:none;font-size:.917em;margin-top:3px}
   .pc-ghlink:hover{color:var(--linkHover);text-decoration:underline}
+  /* On dark profile backgrounds (bg brightness < 50%) the GitHub logo is
+     inverted to white so it stays visible against the profile panel. */
+  #prof.dark-bg .pc-ghlink .gh-icon{fill:#fff}
+  #prof.dark-bg .pc-ghlink{color:#fff}
+  /* The profile's GitHub/Repo link icons are simpleicons.org github in black
+     (181717); on a dark profile bg invert them to white so they don't vanish.
+     Other platform icons keep their own colors. */
+  #prof.dark-bg .pc-link img[src*="simpleicons.org/github/"]{filter:invert(1)}
   .pc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
   .pc-stat{background:var(--bg);border:1px solid var(--borderDim);border-radius:3px;padding:6px 8px}
   .pc-stat .lbl{color:var(--sub);font-size:.833em;letter-spacing:1px}
@@ -143,7 +162,7 @@
   /* chat message sound toggle (same icon as the header sound toggle) */
   #chat .ptitle .csnd{cursor:pointer;color:var(--sub);padding:0 4px;user-select:none;font-size:.917em}
   #chat .ptitle .csnd:hover{color:var(--accent)}
-  #chat .ptitle .csnd.on{color:var(--green)}
+  #chat .ptitle .csnd.on{color:var(--on)}
   /* tier ladder popover */
   #tiers{left:12px;top:12px;width:300px;max-height:70%}
   #tier-list{overflow-y:auto;flex:1;min-height:0}
@@ -177,8 +196,8 @@
   #gh-status img{width:20px;height:20px;image-rendering:pixelated;border-radius:50%}
   /* empty hint */
   .pempty{color:var(--sub);padding:14px;text-align:center;font-size:.917em}
-  #hdr .gh-chip{display:inline-flex;align-items:center;gap:5px;color:var(--link);
-    font-size:.917em;border:1px solid var(--border);border-radius:3px;padding:1px 6px;cursor:pointer}
+  #hdr .gh-chip{display:inline-flex;align-items:center;gap:5px;color:var(--chip);
+    font-size:.917em;border:1px solid var(--chip);border-radius:3px;padding:1px 6px;cursor:pointer}
   #hdr .gh-chip img{width:14px;height:14px;image-rendering:pixelated;border-radius:50%}
   #hdr .gh-chip.dev{color:var(--dev);border-color:var(--dev)}
   /* profile edit panel */
@@ -195,9 +214,17 @@
   .ed-links{display:flex;flex-direction:column;gap:6px}
   .ed-linkrow{display:flex;gap:6px;align-items:center}
   .ed-linkrow img{width:16px;height:16px;flex-shrink:0;object-fit:contain}
+  .ed-linkrow.dragging{opacity:.4}
+  .ed-linkrow.drag-over{border-top:2px solid var(--accent)}
+  .ed-drag{cursor:grab;color:var(--sub);flex-shrink:0;font-size:1em;user-select:none;
+    padding:0 2px;line-height:1}
+  .ed-drag:active{cursor:grabbing}
   .ed-linkrow input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
     padding:6px 8px;font-family:inherit;font-size:.833em;outline:none;border-radius:3px}
   .ed-linkrow input:focus{border-color:var(--accent)}
+  .ed-linkrow select{flex:0 0 auto;max-width:112px;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);padding:6px 4px;font-family:inherit;font-size:.833em;outline:none;border-radius:3px}
+  .ed-linkrow select:focus{border-color:var(--accent)}
   .ed-del{cursor:pointer;background:var(--panel2);border:1px solid var(--border);color:var(--danger);
     border-radius:3px;width:24px;height:24px;flex-shrink:0;font-family:inherit}
   .ed-add{cursor:pointer;background:var(--panel2);border:1px solid var(--border);color:var(--accent);
@@ -223,6 +250,34 @@
   .ed-theme-row input[type=number]{width:64px;background:var(--bg);border:1px solid var(--border);
     color:var(--text);padding:4px 6px;font-family:inherit;font-size:.833em;border-radius:3px}
   .ed-theme-row .ed-input{width:auto;flex:1}
+  .ed-cat{color:var(--sub);font-size:.75em;letter-spacing:1px;text-transform:uppercase;
+    margin:10px 0 2px;border-top:1px solid var(--borderDim);padding-top:8px}
+  .ed-cat:first-child{border-top:none;margin-top:0;padding-top:0}
+  .ed-preset{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:5px 6px;font-family:inherit;font-size:.833em;border-radius:3px;margin:2px 0 6px;
+    cursor:pointer}
+  .ed-preset:focus{border-color:var(--accent);outline:none}
+  .ed-custom{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);
+    border-radius:3px;margin:2px 0 6px;cursor:pointer;font-family:inherit;font-size:.833em}
+  .ed-custom summary{padding:5px 6px;color:var(--sub);letter-spacing:1px;text-transform:uppercase;
+    font-size:.75em;list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+  .ed-custom summary::-webkit-details-marker{display:none}
+  .ed-custom summary::after{content:"▸";color:var(--sub);transition:transform .15s}
+  .ed-custom[open] summary::after{transform:rotate(90deg)}
+  .ed-custom[open] summary{color:var(--accent);border-bottom:1px solid var(--borderDim)}
+  .ed-custom-body{padding:2px 6px 6px}
+  /* Sub-Themes: the collapsible wrapper around the per-category dropdowns. */
+  .ed-subthemes{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);
+    border-radius:3px;margin:2px 0 6px;cursor:pointer;font-family:inherit;font-size:.833em}
+  .ed-subthemes summary{padding:5px 6px;color:var(--sub);letter-spacing:1px;text-transform:uppercase;
+    font-size:.75em;list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+  .ed-subthemes summary::-webkit-details-marker{display:none}
+  .ed-subthemes summary::after{content:"▸";color:var(--sub);transition:transform .15s}
+  .ed-subthemes[open] summary::after{transform:rotate(90deg)}
+  .ed-subthemes[open] summary{color:var(--accent);border-bottom:1px solid var(--borderDim)}
+  .ed-subthemes-body{padding:2px 6px 6px}
+  .ed-master{font-weight:bold;color:var(--accent);letter-spacing:1px;text-transform:uppercase;
+    font-size:.75em;margin:8px 0 2px}
   .ed-save{display:block;width:100%;cursor:pointer;background:var(--accent);color:#000;border:none;
     border-radius:3px;padding:9px;font-family:inherit;font-size:1em;font-weight:bold;margin-top:10px}
   .ed-save:hover{filter:brightness(1.1)}
@@ -243,6 +298,9 @@
     border:1px solid var(--border);border-radius:3px;padding:4px 8px;text-decoration:none;font-size:.833em}
   .ab-link:hover{border-color:var(--accent);color:var(--accent)}
   .ab-link img{width:14px;height:14px;object-fit:contain}
+  /* The About popup sits on the dark --panel; its black simpleicons GitHub
+     logos need inverting to white to stay visible. */
+  .ab-link img[src*="simpleicons.org/github/"]{filter:invert(1)}
   /* tier tooltip (top-right) */
   #tooltip{position:fixed;top:10px;right:10px;z-index:60;pointer-events:none;
     background:var(--panel);border:2px solid var(--border);border-radius:6px;padding:10px 12px;
@@ -277,6 +335,17 @@
     color:var(--text);border-radius:3px;padding:8px;font-family:inherit;font-size:.833em}
   .un-btn:hover{border-color:var(--accent);color:var(--accent)}
   .un-btn.primary{background:var(--accent);color:#000;border:none;font-weight:bold}
+  .un-mute{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;
+    color:var(--sub);font-size:.75em;cursor:pointer}
+  .un-mute input{width:auto;margin:0;cursor:pointer}
+  /* dev rainbow: animated border + rainbow name text */
+  @keyframes rainbowBorder{0%{border-color:#ff0000}17%{border-color:#ff8800}33%{border-color:#ffff00}50%{border-color:#00ff00}67%{border-color:#0088ff}83%{border-color:#8800ff}100%{border-color:#ff0000}}
+  @keyframes rainbowText{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+  .rainbow-border{border-color:#ff0000;animation:rainbowBorder 2.5s linear infinite}
+  .rainbow-name{background:linear-gradient(90deg,#ff0000,#ff8800,#ffff00,#00ff00,#0088ff,#8800ff,#ff0000);
+    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+    color:transparent!important;-webkit-text-fill-color:transparent;
+    animation:rainbowText 2.5s linear infinite}
 
 </style>
 </head>
@@ -362,9 +431,9 @@ let agents = [], frame = 0, offline = null;
 let state = null;
 
 // ── palettes / sprites ──────────────────────────────────────────────────
-const SKIN=["#f0c8a0","#c68b59","#8d5524","#ffdbac","#e0ac69","#a1665e"];
-const SHIRT=["#4fa4d8","#d84f6f","#5fce7a","#c9a227","#9b6fd8","#d87f4f"];
-const HAIR=["#2b2b2b","#5a3825","#c9a227","#8a8a8a","#7a3030","#4a6741"];
+let SKIN=shadePalette("#f0c8a0",6);
+let SHIRT=shadePalette("#4fa4d8",6);
+let HAIR=shadePalette("#2b2b2b",6);
 function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return Math.abs(h)}
 function px(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.round(x*S),Math.round(y*S),w*S,h*S)}
 
@@ -380,39 +449,275 @@ function iconPathLarge(name){return "icons/large/"+(name||"001_Wood_Heraldic_Shi
 function tierCalls(ops){return Math.ceil((Number(ops)||0)/2);}
 function tierSessions(ops){return Math.ceil(tierCalls(ops)/150);}
 function timeStr(ts){const d=new Date(ts*1000);return d.toTimeString().slice(0,5)}
-function isDev(g){return /^drgekoz$/i.test(g||"")}
+function isDev(g){return /^(drgekoz|teknium1)$/i.test(g||"")}
 function isMe(id){return state&&state.identity&&(id===state.identity.github||id===state.identity.name)}
 
 // ── link platforms + interface theming ────────────────────────────────
 const LINK_PLATFORMS=[
+  {key:"github",name:"GitHub",color:"181717",slug:"github"},
+  {key:"repos",name:"GitHub Repos",color:"181717",slug:"github"},
   {key:"youtube",name:"YouTube",color:"FF0000",slug:"youtube"},
+  {key:"reddit",name:"Reddit",color:"FF4500",slug:"reddit"},
   {key:"spotify",name:"Spotify",color:"1DB954",slug:"spotify"},
   {key:"soundcloud",name:"SoundCloud",color:"FF5500",slug:"soundcloud"},
-  {key:"github",name:"GitHub",color:"181717",slug:"github"},
   {key:"discord",name:"Discord",color:"5865F2",slug:"discord"},
   {key:"steam",name:"Steam",color:"000000",slug:"steam"}
 ];
 function linkIcon(key){const p=LINK_PLATFORMS.find(x=>x.key===key);return p?"https://cdn.simpleicons.org/"+p.slug+"/"+p.color:"";}
 function linkName(key){const p=LINK_PLATFORMS.find(x=>x.key===key);return p?p.name:key;}
+// Extract a friendly display name from a profile link URL (e.g. the GitHub
+// username, a repo name, a Discord/YouTube handle). Falls back to a cleaned
+// URL or the platform name when nothing useful can be pulled out.
+function linkDisplayName(key,url){
+  const s=String(url||"").trim();
+  if(!s)return linkName(key);
+  try{
+    const u=/^https?:\/\//i.test(s)?new URL(s):new URL("https://"+s);
+    const parts=u.pathname.split("/").filter(Boolean);
+    const last=parts.length?decodeURIComponent(parts[parts.length-1]).replace(/\.git$/i,""):"";
+    if(key==="repos")return last||"repo";
+    if(key==="github")return parts[0]||last||"GitHub";
+    if(key==="discord")return "DISCORD";
+    if(key==="youtube"){
+      const m=s.match(/@([A-Za-z0-9_\-]+)/);
+      if(m)return "@"+m[1];
+      if(parts.length)return parts[parts.length-1];
+      return "YouTube";
+    }
+    if(key==="reddit"){
+      // reddit.com/u/user or reddit.com/user/user, or r/subreddit
+      if(parts[0]==="u"||parts[0]==="user")return "u/"+parts[1];
+      if(parts[0]==="r")return "r/"+parts[1];
+      return parts[0]||last||"Reddit";
+    }
+    if(key==="steam"){
+      if(parts[0]==="id"||parts[0]==="profiles")return parts[1]||last||"Steam";
+      return last||"Steam";
+    }
+    if(key==="spotify")return (last||u.hostname).slice(0,12);
+    if(key==="soundcloud")return parts[0]||last||"SoundCloud";
+    return last||u.hostname;
+  }catch(e){return s;}
+}
+
+// Normalize a profile's links into a flat, order-preserving array of
+// {platform, url} objects so reordering (drag-and-drop) is free across
+// platforms. Legacy data stored links as {platform:[url,...]} — flatten
+// that in LINK_PLATFORMS order so older saved profiles keep working.
+function normalizeLinks(raw){
+  if(Array.isArray(raw)){
+    return raw
+      .map(l=>typeof l==="string"?{platform:"github",url:l}:(l||{}))
+      .filter(l=>String(l.url||"").trim());
+  }
+  if(raw && typeof raw==="object"){
+    const out=[];
+    LINK_PLATFORMS.forEach(p=>{
+      const arr=raw[p.key];
+      if(Array.isArray(arr))arr.forEach(u=>{if(String(u||"").trim())out.push({platform:p.key,url:u});});
+    });
+    return out;
+  }
+  return [];
+}
 
 const THEME_DEFAULTS={bg:"#1a1423",panel:"#221a2e",panel2:"#241c30",panelHover:"#2a2138",
   border:"#3a2f4b",borderDim:"#2c2340",rowMe:"#2a2438",rowCurrent:"#33291a",
   accent:"#e8c170",text:"#cfc4e8",sub:"#7a6f8f",green:"#5fce7a",dev:"#ffd700",
   link:"#7fa8d8",linkHover:"#a8c8e8",danger:"#d84f6f",scroll:"#4a3f63",time:"#555",
+  chip:"#7fa8d8",on:"#5fce7a",
+  cvFloor:"#2a2138",cvFloorAlt:"#251d31",cvWall:"#3a2f4b",cvWallTrim:"#241c30",
+  cvWindow:"#151022",cvWindowGlass:"#3b5a8f",cvWindowGlow:"#7fa8d8",
+  cvDesk:"#6b4a2f",cvDeskDark:"#54381f",cvDeskLeg:"#3c2814",cvMonitor:"#191524",
+  cvScreen:"#0f2c1e",cvPlant:"#5fce7a",cvPlantDark:"#4aa860",cvPot:"#8d5524",
+  agSkin:"#f0c8a0",agShirt:"#4fa4d8",agHair:"#2b2b2b",
   font:"ui-monospace,Menlo,Consolas,monospace",fontSize:12};
+// 8-bit / retro pixel fonts available for the interface theme (loaded via
+// Google Fonts in <head>). Value is the CSS font-family stack.
+const FONT_OPTIONS=[
+  {label:"Monospace (default)",value:"ui-monospace,Menlo,Consolas,monospace"},
+  {label:"Press Start 2P",value:"'Press Start 2P',monospace"},
+  {label:"VT323",value:"'VT323',monospace"},
+  {label:"Silkscreen",value:"'Silkscreen',monospace"},
+  {label:"Pixelify Sans",value:"'Pixelify Sans',monospace"},
+  {label:"DotGothic16",value:"'DotGothic16',monospace"},
+  {label:"Rubik Pixel",value:"'Rubik Pixel',monospace"},
+  {label:"Space Mono",value:"'Space Mono',monospace"}
+];
+// Pre-built color presets per interface-theme category. Populated entirely by
+// the colour-series generator below (every section gets each main colour).
+const INTERFACE_PRESETS={main:[],leaderboard:[],chat:[],other:[],canvas:[],agents:[]};
+// Pre-built themes for the PROFILE popup (profileTheme). Also filled by the
+// colour-series generator below.
+const PROFILE_PRESETS=[];
+// ── colour helpers ───────────────────────────────────────────────────
+function _hexRgb(hex){
+  let h=String(hex||"#000000").replace(/^#/,"");
+  if(h.length===3)h=h.split("").map(x=>x+x).join("");
+  if(h.length!==6)return [0,0,0];
+  return [parseInt(h.slice(0,2),16)||0,parseInt(h.slice(2,4),16)||0,parseInt(h.slice(4,6),16)||0];
+}
+function mixHex(a,b,t){
+  const A=_hexRgb(a),B=_hexRgb(b);t=Math.max(0,Math.min(1,t||0));
+  const m=k=>Math.round(A[k]+(B[k]-A[k])*t);
+  return "#"+[m(0),m(1),m(2)].map(x=>Math.max(0,Math.min(255,x)).toString(16).padStart(2,"0")).join("");
+}
+function hueShift(hex,deg){
+  let h=String(hex||"#000").replace(/^#/,""); if(h.length===3)h=h.split("").map(x=>x+x).join("");
+  const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let s=mx===0?0:d/mx,l=(mx+mn)/2,hh=0;
+  if(d){if(mx===r)hh=((g-b)/d)%6;else if(mx===g)hh=(b-r)/d+2;else hh=(r-g)/d+4;hh*=60;if(hh<0)hh+=360;}
+  hh=((hh+deg)%360+360)%360;
+  const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((hh/60)%2-1)),m=l-c/2;
+  let rr=0,gg=0,bb=0;
+  if(hh<60){rr=c;gg=x;}else if(hh<120){rr=x;gg=c;}else if(hh<180){gg=c;bb=x;}else if(hh<240){gg=x;bb=c;}else if(hh<300){rr=x;bb=c;}else{rr=c;bb=x;}
+  const to=n=>Math.round((n+m)*255).toString(16).padStart(2,"0");
+  return "#"+to(rr)+to(gg)+to(bb);
+}
+function shadeHex(hex,amt){ // reuse shadeColor if defined later; standalone guard
+  return (typeof shadeColor==="function")?shadeColor(hex,amt):hex;
+}
+
+// A theme palette is {accent, alt, dark, text, sub}. buildTheme() expands it
+// into every category's value object so each theme applies consistently.
+function buildTheme(pal){
+  const d=pal.dark, a=pal.accent, alt=pal.alt, t=pal.text, s=pal.sub;
+  return {
+    main:{bg:mixHex(d,a,0.02),panel:mixHex(d,a,0.06),panel2:mixHex(d,a,0.10),
+      panelHover:mixHex(d,a,0.15),border:mixHex(d,a,0.28),borderDim:mixHex(d,a,0.16),
+      accent:a,text:t,sub:s,chip:a,on:alt,scroll:mixHex(d,a,0.20)},
+    leaderboard:{rowMe:mixHex(d,a,0.10),rowCurrent:mixHex(d,alt,0.16),green:alt,dev:"#ffd700"},
+    chat:{link:a,linkHover:mixHex(a,t,0.35),time:s},
+    canvas:{cvFloor:mixHex(d,a,0.12),cvFloorAlt:mixHex(d,a,0.08),cvWall:mixHex(d,a,0.20),
+      cvWallTrim:mixHex(d,a,0.26),cvWindow:mixHex(d,a,0.34),cvWindowGlass:mixHex(d,alt,0.35),
+      cvWindowGlow:a,cvDesk:mixHex(d,a,0.18),cvDeskDark:mixHex(d,a,0.12),cvDeskLeg:mixHex(d,a,0.08),
+      cvMonitor:mixHex(d,a,0.30),cvScreen:mixHex(d,alt,0.45),cvPlant:alt,cvPlantDark:mixHex(d,alt,0.15),
+      cvPot:mixHex(d,alt,0.12)},
+    agents:{agSkin:"#f0c8a0",agShirt:a,agHair:mixHex(d,a,0.30)},
+    other:{danger:"#e0526b"},
+    profile:{color:a,border:a,bg:d,text:t,sub:s,link:a,green:alt,dev:"#ffd700"}
+  };
+}
+
+// ── theme definitions ────────────────────────────────────────────────
+// Group "Color": the original one-per-colour themes, kept at the top.
+const COLOR_SERIES=[
+  ["Scarlet","#ff5f5f"],["Ember","#ff9e3d"],["Sunflare","#ffd94d"],["Emerald","#5fce7a"],
+  ["Frost","#3ee6b0"],["Lagoon","#45d6e8"],["Azure","#5fa8ff"],["Orchid","#9a7bff"],
+  ["Neon","#ff5fd0"],["Amethyst","#b05fe8"]
+];
+// Group "Palette": extra cool multi-colour themes.
+// [name, accent, alt, dark, text, sub]
+const COOL_PALETTES=[
+  ["Synthwave", "#ff3d8f", "#39d0ff", "#1a0b2e", "#fff0fa", "#b79ad0"],
+  ["Cyberpunk", "#00f0ff", "#ff2e6b", "#0a0a1a", "#e8faff", "#7a8fa8"],
+  ["Ocean",     "#2fa9ff", "#3ee6c0", "#04121f", "#eaf6ff", "#6f8faa"],
+  ["Forest",    "#5fd76b", "#b8e05a", "#08140a", "#eef9e9", "#7fa87f"],
+  ["Candy",     "#ff6bb3", "#7be8c8", "#1d0f1d", "#ffeef7", "#c79abf"],
+  ["Sunset",    "#ff7a3d", "#b45fd7", "#1c0d0f", "#fff3ea", "#c9a48f"],
+  ["Matrix",    "#33ff66", "#8fff33", "#041404", "#eafff0", "#6faa7a"],
+  ["Midnight",  "#7fb2ff", "#ffd77a", "#0a0f1c", "#eef4ff", "#7f93b8"],
+  ["Royal",     "#9a7bff", "#ffd77a", "#120b26", "#f3eeff", "#9f93c9"],
+  ["Slate",     "#5fa8e8", "#9fb8d8", "#0e1218", "#eef3f8", "#8a9bb0"],
+  ["Emberglow", "#ff9e3d", "#ff4d6b", "#1a0f08", "#fff2e6", "#c9a48a"],
+  ["Mint",      "#3ee6b0", "#7ee8ff", "#06201a", "#eafff8", "#7fb8a8"]
+];
+
+(function(){
+  const addTheme=(group,name,pal)=>{
+    const v=buildTheme(pal);
+    INTERFACE_PRESETS.main.push({group,name,values:v.main});
+    INTERFACE_PRESETS.leaderboard.push({group,name,values:v.leaderboard});
+    INTERFACE_PRESETS.chat.push({group,name,values:v.chat});
+    INTERFACE_PRESETS.canvas.push({group,name,values:v.canvas});
+    INTERFACE_PRESETS.agents.push({group,name,values:v.agents});
+    INTERFACE_PRESETS.other.push({group,name,values:v.other});
+    PROFILE_PRESETS.push({group,name,values:v.profile});
+  };
+  // Cool palettes first (top of the dropdown), then the original colour
+  // themes beneath them.
+  COOL_PALETTES.forEach(([n,a,alt,d,t,s])=>{
+    addTheme("Palette", n, {accent:a,alt:alt,dark:d,text:t,sub:s});
+  });
+  COLOR_SERIES.forEach(([n,c])=>{
+    addTheme("Color", n, {
+      accent:c, alt:hueShift(c,150),
+      dark:mixHex(c,"#0b0b14",0.55), text:mixHex(c,"#ffffff",0.72), sub:mixHex(c,"#ffffff",0.20)
+    });
+  });
+})();
+
+// Render a <select> option list grouped by each preset's category (the
+// original "Color" themes form their own group, the cool palettes another).
+function presetOptionsHtml(presets){
+  let html='<option value="">— choose a preset —</option>';
+  let last=null;
+  presets.forEach((p,i)=>{
+    const g=p.group||"";
+    if(g!==last){
+      if(last!==null)html+='</optgroup>';
+      html+='<optgroup label="'+esc(g)+'">';
+      last=g;
+    }
+    html+='<option value="'+i+'">'+esc(p.name)+'</option>';
+  });
+  if(last!==null)html+='</optgroup>';
+  return html;
+}
 const CSS_VAR_MAP={bg:"--bg",panel:"--panel",panel2:"--panel2",panelHover:"--panelHover",
   border:"--border",borderDim:"--borderDim",rowMe:"--rowMe",rowCurrent:"--rowCurrent",
   accent:"--accent",text:"--text",sub:"--sub",green:"--green",dev:"--dev",
   link:"--link",linkHover:"--linkHover",danger:"--danger",scroll:"--scroll",time:"--time",
+  chip:"--chip",on:"--on",
+  cvFloor:"--cvFloor",cvFloorAlt:"--cvFloorAlt",cvWall:"--cvWall",cvWallTrim:"--cvWallTrim",
+  cvWindow:"--cvWindow",cvWindowGlass:"--cvWindowGlass",cvWindowGlow:"--cvWindowGlow",
+  cvDesk:"--cvDesk",cvDeskDark:"--cvDeskDark",cvDeskLeg:"--cvDeskLeg",cvMonitor:"--cvMonitor",
+  cvScreen:"--cvScreen",cvPlant:"--cvPlant",cvPlantDark:"--cvPlantDark",cvPot:"--cvPot",
+  agSkin:"--agSkin",agShirt:"--agShirt",agHair:"--agHair",
   font:"--font",fontSize:"--fs"};
+// tracks the last theme actually applied, so closing the edit panel without
+// saving can revert to it (interface theme preview is live while editing).
+let lastAppliedTheme=null;
 function applyInterfaceTheme(theme){
   theme=theme||{};
+  lastAppliedTheme=Object.assign({},THEME_DEFAULTS,theme);
   const root=document.documentElement.style;
   for(const k in CSS_VAR_MAP){
     let v=(theme[k]!=null)?theme[k]:THEME_DEFAULTS[k];
     if(k==="fontSize")v=String(v)+"px";
     root.setProperty(CSS_VAR_MAP[k],String(v));
   }
+  resolveScene();
+}
+// Resolve the theme's canvas + pixel-agent colors (CSS vars) into a plain
+// object the canvas render loop reads every frame, so theme changes take
+// effect on the office scene + agents immediately. Refreshed on apply.
+let SCENE={cvFloor:"#2a2138",cvFloorAlt:"#251d31",cvWall:"#3a2f4b",cvWallTrim:"#241c30",
+  cvWindow:"#151022",cvWindowGlass:"#3b5a8f",cvWindowGlow:"#7fa8d8",cvDesk:"#6b4a2f",
+  cvDeskDark:"#54381f",cvDeskLeg:"#3c2814",cvMonitor:"#191524",cvScreen:"#0f2c1e",
+  cvPlant:"#5fce7a",cvPlantDark:"#4aa860",cvPot:"#8d5524",
+  agSkin:"#f0c8a0",agShirt:"#4fa4d8",agHair:"#2b2b2b"};
+function resolveScene(){
+  const cs=getComputedStyle(document.documentElement);
+  const g=n=>{const v=cs.getPropertyValue("--"+n).trim();return v||SCENE[n]||""};
+  ["cvFloor","cvFloorAlt","cvWall","cvWallTrim","cvWindow","cvWindowGlass","cvWindowGlow",
+   "cvDesk","cvDeskDark","cvDeskLeg","cvMonitor","cvScreen","cvPlant","cvPlantDark","cvPot",
+   "agSkin","agShirt","agHair"].forEach(k=>SCENE[k]=g(k));
+  // rebuild per-agent palettes from the theme base hues
+  SKIN=shadePalette(SCENE.agSkin,6);
+  SHIRT=shadePalette(SCENE.agShirt,6);
+  HAIR=shadePalette(SCENE.agHair,6);
+}
+function shadePalette(base,n){
+  const out=[]; for(let i=0;i<n;i++){out.push(shadeColor(base,i/(n-1||1)*0.5-0.25));} return out;
+}
+function shadeColor(hex,amt){
+  hex=String(hex||"#888").replace("#",""); if(hex.length===3)hex=hex.split("").map(c=>c+c).join("");
+  let r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
+  const t=amt>0?255:0; const f=Math.abs(amt);
+  r=Math.round(r+(t-r)*f); g=Math.round(g+(t-g)*f); b=Math.round(b+(t-b)*f);
+  return "#"+[r,g,b].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 function ghAvatarFor(rowOrUser){
   if(rowOrUser&&typeof rowOrUser==="object"){
@@ -430,6 +735,7 @@ function myGitHub(){return (state&&state.identity&&state.identity.github)?state.
 function isMine(r){const g=myGitHub();return !!g&&String(r&&r.github||"").toLowerCase()===g.toLowerCase();}
 // apply a locally-saved interface theme (persists across reloads, pre-server)
 try{const lt=localStorage.getItem("pixelOfficeTheme");if(lt){const t=JSON.parse(lt);if(t&&typeof t==="object")applyInterfaceTheme(t);}}catch(e){}
+resolveScene();
 
 // ── local profile cache (overlay so edits work even before server restart) ──
 function localProfileKey(){const g=myGitHub();return g?"pixelOfficeProfile_"+g.toLowerCase():"";}
@@ -471,6 +777,12 @@ function checkTierUnlock(){
   if(!t||!t.t)return;
   if(!unlockInit){lastTierT=t.t;unlockInit=true;return;} // don't popup for already-earned on load
   if(t.t>lastTierT){
+    const muted=localStorage.getItem("pixelOfficeTierUnlockMuted")==="1";
+    const auto =localStorage.getItem("pixelOfficeTierAutoIcon")==="1";
+    // "always use new icon": apply it automatically, no prompt needed
+    if(auto && myGitHub())setMyTierIcon(t.icon);
+    // skip the modal when auto-applying the icon OR when muted (don't show again)
+    if(muted || auto){lastTierT=t.t;return;}
     if(soundOn)chime([660,880,1320,1760]); // tier-up fanfare
     showUnlockModal(t);
     lastTierT=t.t;
@@ -495,9 +807,21 @@ function showUnlockModal(tier){
         '<button class="un-btn" id="un-keep">Keep my icon</button>'+
         '<button class="un-btn primary" id="un-use">Use new icon</button>'+
       '</div>'+
+      '<label class="un-mute"><input type="checkbox" id="un-auto"> '+
+        'Always use new icon on unlock</label>'+
+      '<label class="un-mute"><input type="checkbox" id="un-mute"> '+
+        'Don\'t show these again (re-enable in Edit Profile)</label>'+
     '</div>';
   el.querySelector(".pclose").onclick=()=>togglePanel("unlock",false);
   document.getElementById("un-keep").onclick=()=>togglePanel("unlock",false);
+  document.getElementById("un-auto").onchange=function(){
+    if(this.checked)localStorage.setItem("pixelOfficeTierAutoIcon","1");
+    else localStorage.removeItem("pixelOfficeTierAutoIcon");
+  };
+  document.getElementById("un-mute").onchange=function(){
+    if(this.checked)localStorage.setItem("pixelOfficeTierUnlockMuted","1");
+    else localStorage.removeItem("pixelOfficeTierUnlockMuted");
+  };
   document.getElementById("un-use").onclick=()=>{
     if(myGitHub())setMyTierIcon(tier.icon);
     togglePanel("unlock",false);
@@ -516,34 +840,35 @@ function setMyTierIcon(icon){
 // ── office scene ────────────────────────────────────────────────────────
 function drawOffice(w,h){
   for(let y=0;y<h;y+=8)for(let x=0;x<w;x+=8)
-    px(x,y,8,8,((x+y)/8)%2?"#2a2138":"#251d31");
-  px(0,0,w,6,"#3a2f4b"); px(0,6,w,1,"#241c30");            // wall
-  for(let x=14;x<w-14;x+=26){px(x,1,10,4,"#151022");        // windows
-    px(x+1,2,8,2,"#3b5a8f");px(x+2,2,2,1,"#7fa8d8");}
-  px(1,1,7,6,"#54381f"); px(2,2,5,5,"#6b4a2f"); px(6,4,1,1,"#e8c170"); // door
-  const rw=Math.min(24,w-10); px((w-rw)/2,h-8,rw,5,"#3a2f4b");
-  px((w-rw)/2+1,h-7,rw-2,3,"#443358");
-  px(w-6,h-14,3,1,"#5fce7a");px(w-7,h-15,2,2,"#5fce7a");px(w-4,h-15,2,2,"#4aa860");
-  px(w-6,h-13,2,3,"#8d5524");px(w-6,h-10,3,1,"#54381f");
-  px(2,h-14,4,5,"#7fa8d8");px(3,h-15,2,1,"#a8c8e8");px(2,h-9,4,1,"#4a4a5a");
+    px(x,y,8,8,((x+y)/8)%2?SCENE.cvFloor:SCENE.cvFloorAlt);
+  px(0,0,w,6,SCENE.cvWall); px(0,6,w,1,SCENE.cvWallTrim);            // wall
+  for(let x=14;x<w-14;x+=26){px(x,1,10,4,SCENE.cvWindow);        // windows
+    px(x+1,2,8,2,SCENE.cvWindowGlass);px(x+2,2,2,1,SCENE.cvWindowGlow);}
+  px(1,1,7,6,SCENE.cvDeskDark); px(2,2,5,5,SCENE.cvDesk); px(6,4,1,1,"#e8c170"); // door
+  const rw=Math.min(24,w-10); px((w-rw)/2,h-8,rw,5,SCENE.cvWall);
+  px((w-rw)/2+1,h-7,rw-2,3,SCENE.cvDesk);
+  px(w-6,h-14,3,1,SCENE.cvPlant);px(w-7,h-15,2,2,SCENE.cvPlant);px(w-4,h-15,2,2,SCENE.cvPlantDark);
+  px(w-6,h-13,2,3,SCENE.cvPot);px(w-6,h-10,3,1,SCENE.cvDeskDark);
+  px(2,h-14,4,5,SCENE.cvWindowGlow);px(3,h-15,2,1,"#a8c8e8");px(2,h-9,4,1,"#4a4a5a");
   px(3,h-8,2,2,"#4a4a5a");
-  px(10,h-11,6,1,"#6b4a2f");px(10,h-10,6,3,"#54381f");
-  px(11,h-14,4,3,"#33283f");px(12,h-13,1,1,"#d84f6f");
+  px(10,h-11,6,1,SCENE.cvDesk);px(10,h-10,6,3,SCENE.cvDeskDark);
+  px(11,h-14,4,3,SCENE.cvWindow);px(12,h-13,1,1,"#d84f6f");
 }
 function drawDesk(x,y){
-  px(x,y+10,16,1,"#6b4a2f"); px(x,y+11,16,3,"#54381f");
-  px(x+1,y+14,2,4,"#3c2814"); px(x+13,y+14,2,4,"#3c2814");
-  px(x+10,y+4,6,5,"#191524");
+  px(x,y+10,16,1,SCENE.cvDesk); px(x,y+11,16,3,SCENE.cvDeskDark);
+  px(x+1,y+14,2,4,SCENE.cvDeskLeg); px(x+13,y+14,2,4,SCENE.cvDeskLeg);
+  px(x+10,y+4,6,5,SCENE.cvMonitor);
   px(x+12,y+9,2,1,"#4a4a5a");
 }
 function deskScreen(x,y,a){
   const t=frame>>3;
-  let col="#0f2c1e";
+  let col=SCENE.cvScreen;
   if(a){
-    if(a.activity==="running")col=(t%4<2)?"#0f3c1e":"#0f2c16";
-    else if(a.activity==="browsing")col=(t%6<3)?"#1e2c4a":"#24365a";
-    else if(a.activity==="typing")col=(t%2)?"#12321e":"#0f2c1e";
-    else if(a.status==="waiting")col="#3c1e28";
+    const base=SCENE.cvScreen||"#0f2c1e";
+    if(a.activity==="running")col=(t%4<2)?shadeColor(base,0.25):shadeColor(base,0.1);
+    else if(a.activity==="browsing")col=(t%6<3)?shadeColor(base,-0.2):shadeColor(base,-0.4);
+    else if(a.activity==="typing")col=(t%2)?shadeColor(base,0.15):base;
+    else if(a.status==="waiting")col=shadeColor(base,-0.5);
   }
   px(x+11,y+5,4,3,col);
 }
@@ -743,6 +1068,96 @@ function renderLeaderboard(){
 }
 
 // ── profile card ───────────────────────────────────────────────────────
+// Maps a user's profileTheme onto the #prof popup (scoped CSS vars so the
+// rest of the UI keeps the viewer's own interface theme).
+// Perceived brightness of a hex colour 0..1 (0 = black, 1 = white).
+function hexBrightness(hex){
+  let h=String(hex||"#000000").replace(/^#/,"");
+  if(h.length===3)h=h.split("").map(c=>c+c).join("");
+  if(h.length!==6)return 0;
+  const r=parseInt(h.slice(0,2),16)||0, g=parseInt(h.slice(2,4),16)||0, b=parseInt(h.slice(4,6),16)||0;
+  return (0.299*r+0.587*g+0.114*b)/255;
+}
+function applyProfileTheme(el,theme){
+  theme=theme||{};
+  const accent=(theme.color||theme.accent||"#e8c170");
+  el.style.setProperty("--border",theme.border||accent);
+  el.style.setProperty("--accent",accent);
+  el.style.setProperty("--panel",theme.bg||"");
+  el.style.setProperty("--panel2",theme.bg||"");
+  el.style.setProperty("--text",theme.text||"");
+  el.style.setProperty("--sub",theme.sub||"");
+  el.style.setProperty("--link",theme.link||"");
+  el.style.setProperty("--green",theme.green||"");
+  el.style.setProperty("--dev",theme.dev||"");
+  // Theme the popup's line separators (--borderDim), stat-box backgrounds
+  // (--bg) and link hover so the whole card follows the profile theme rather
+  // than inheriting the viewer's interface theme.
+  const pbg=theme.bg||"";
+  const pborder=theme.border||accent;
+  const plink=theme.link||accent;
+  el.style.setProperty("--bg", pbg?mixHex(pbg,"#000000",0.38):"");
+  el.style.setProperty("--borderDim", pborder?mixHex(pborder,"#000000",0.5):"");
+  el.style.setProperty("--linkHover", plink?mixHex(plink,"#ffffff",0.35):"");
+  // Invert the GitHub logo to white when the profile background is dark
+  // (<50% brightness). Unset bg falls back to the dark default panel.
+  el.classList.toggle("dark-bg", hexBrightness(theme.bg)<0.5);
+  // DEV rainbow: animated rainbow border (overrides border color) + name.
+  if(theme.rainbow){
+    el.classList.add("rainbow-border");
+    const n=el.querySelector(".pc-name");
+    if(n)n.classList.add("rainbow-name");
+  }else{
+    el.classList.remove("rainbow-border");
+    const n=el.querySelector(".pc-name");
+    if(n)n.classList.remove("rainbow-name");
+  }
+}
+// map raw tool names to a short human label for the live AGENTS roster
+function agentActLabel(a){
+  const t=(a.tool||a.activity||"").toLowerCase();
+  if(!t)return (a.status||"idle");
+  if(t.includes("read")||t.includes("view")||t.includes("search")||t.includes("find"))return "reading";
+  if(t.includes("patch")||t.includes("write")||t.includes("edit")||t.includes("replace"))return "editing";
+  if(t.includes("terminal")||t.includes("exec")||t.includes("shell")||t.includes("command"))return "running";
+  if(t.includes("delegate")||t.includes("task")||t.includes("subagent"))return "delegating";
+  if(t.includes("fact")||t.includes("memory"))return "memory";
+  if(t.includes("image")||t.includes("vision"))return "imaging";
+  if(t.includes("web")||t.includes("fetch")||t.includes("url"))return "browsing";
+  if(t.includes("tts")||t.includes("audio")||t.includes("voice"))return "audio";
+  if(t.includes("cron"))return "scheduling";
+  return t.replace(/_/g," ").slice(0,16);
+}
+// re-render just the live AGENTS roster on the open profile popup
+function refreshProfileAgents(){
+  const pp=document.getElementById("prof");
+  if(!pp||!pp.classList.contains("open"))return;
+  const curId=pp.dataset.curId;
+  if(!curId)return;
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const r=board.find(x=>x.id===curId||x.github===curId);
+  if(!r)return;
+  const activeAgents=(r.agents||[]).filter(a=>a.status && a.status!=="idle" && a.status!=="gone");
+  const box=document.getElementById("pc-aglist");
+  if(!box)return;
+  box.innerHTML=activeAgents.length
+    ? activeAgents.map(a=>
+        '<div class="pc-ag"><span class="ag-dot" style="background:'+statusColor(a.status)+'"></span>'+
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">'+esc(a.label)+'</span>'+
+        '<span class="ag-st">'+esc(agentActLabel(a))+'</span></div>').join("")
+    : '<div style="color:var(--sub);font-size:.833em">no active agents</div>';
+}
+let profileTimer=null;
+function startProfileTimer(){
+  stopProfileTimer();
+  profileTimer=setInterval(refreshProfileAgents,2000);
+}
+function stopProfileTimer(){
+  if(profileTimer){clearInterval(profileTimer);profileTimer=null;}
+}
+// True while the profile/edit panel is open, so the periodic /state poll does
+// NOT re-apply the server's saved interface theme on top of a live preview.
+let editPanelOpen=false;
 function showProfile(id){
   const board=mergeBoards(currentBoard(),loadCachedBoard());
   const r=board.find(x=>x.id===id||x.github===id);
@@ -754,22 +1169,13 @@ function showProfile(id){
   const theme=r.profileTheme||{};
   const accent=(theme.color||theme.accent||"#e8c170");
   const nameColor=dev?"var(--dev)":accent;
-  const links=r.links||{};
+  const links=normalizeLinks(r.links);
   const bio=(r.bio||"").trim();
-  const agents=(r.agents||[]).map(a=>esc(a.label)).join(" · ")||"—";
-  const activeAgents=(r.agents||[]).filter(a=>a.status && a.status!=="idle" && a.status!=="gone");
-  const agRoster=activeAgents.length
-    ? '<div class="pc-aglist">'+activeAgents.map(a=>
-        '<div class="pc-ag"><span class="ag-dot" style="background:'+statusColor(a.status)+'"></span>'+
-        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px">'+esc(a.label)+'</span>'+
-        '<span class="ag-st">'+esc(a.status||"idle")+'</span></div>').join("")+'</div>'
-    : '<div style="color:var(--sub);font-size:.833em">no active agents</div>';
   let linksHtml="";
-  LINK_PLATFORMS.forEach(p=>{
-    (links[p.key]||[]).filter(Boolean).forEach(u=>{
-      linksHtml+='<a class="pc-link" href="'+esc(u)+'" target="_blank" rel="noopener">'+
-        '<img src="'+linkIcon(p.key)+'" alt="" onerror="this.style.display=\'none\'">'+esc(p.name)+'</a>';
-    });
+  links.forEach(l=>{
+    const pkey=l.platform||"github";
+    linksHtml+='<a class="pc-link" href="'+esc(l.url)+'" target="_blank" rel="noopener">'+
+      '<img src="'+linkIcon(pkey)+'" alt="" onerror="this.style.display=\'none\'">'+esc(linkDisplayName(pkey,l.url))+'</a>';
   });
   document.getElementById("prof").innerHTML=
     '<div class="ptitle"><span>PROFILE · '+r.rank+'</span><span class="pclose" data-close="prof">✕</span></div>'+
@@ -782,7 +1188,8 @@ function showProfile(id){
           (dev?' <span class="lb-dev">DEV</span>':'')+'</div>'+
         (dev?'<div class="pc-devtitle">Multiplayer Fork Developer</div>':'')+
         '<div class="pc-sub">'+esc(tier.name||"")+' · Tier '+(tier.t||"")+'</div>'+
-        '<a class="pc-ghlink" href="https://github.com/'+esc(r.github)+'" target="_blank" rel="noopener">🐙 '+esc(r.github||"GitHub")+' ↗</a>'+
+        '<a class="pc-ghlink" href="https://github.com/'+esc(r.github)+'" target="_blank" rel="noopener">'+
+        '<svg class="gh-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> '+esc(r.github||"GitHub")+' ↗</a>'+
       '</div></div>'+
     (bio?'<div class="pc-bio">'+esc(bio)+'</div>':'')+
     (linksHtml?'<div class="pc-links">'+linksHtml+'</div>':'')+
@@ -793,51 +1200,96 @@ function showProfile(id){
       '<div class="pc-stat"><div class="lbl">TIME RAN</div><div class="val">'+fmtTime(r.time_s)+'</div></div>'+
       '</div>'+
     (mine?'<div class="pc-actions"><button class="pc-editbtn" id="edit-profile-btn">✎ Edit Profile</button></div>':'')+
-    '<div class="pc-agents"><b>AGENTS</b>'+agRoster+'</div>';
-  document.getElementById("prof").querySelector(".pclose").onclick=()=>togglePanel("prof",false);
+    '<div class="pc-agents"><b>AGENTS</b><div id="pc-aglist"></div></div>';
+  // theme the popup itself with this user's profile accent (border + accent
+  // vars only on the #prof subtree so the rest of the UI is untouched)
+  const profEl=document.getElementById("prof");
+  profEl.dataset.curId=r.id||r.github||"";
+  applyProfileTheme(profEl,theme);
+  const pclose=document.getElementById("prof").querySelector(".pclose");
+  pclose.onclick=()=>{stopProfileTimer();togglePanel("prof",false);};
   const eb=document.getElementById("edit-profile-btn");
-  if(eb)eb.onclick=()=>{togglePanel("prof",false);openEditProfile(r);};
+  if(eb)eb.onclick=()=>{stopProfileTimer();togglePanel("prof",false);openEditProfile(r);};
+  refreshProfileAgents();
   togglePanel("prof",true);
+  startProfileTimer();
 }
 
 // ── profile editing ───────────────────────────────────────────────────
-function linkRowHtml(p, val){
-  return '<div class="ed-linkrow"><img src="'+linkIcon(p.key)+'" alt="" onerror="this.style.display=\'none\'">'+
-    '<input data-platform="'+p.key+'" type="url" placeholder="https://..." value="'+esc(val||"")+'">'+
-    '<button class="ed-del" data-del="'+p.key+'" title="remove">✕</button></div>';
+function linkRowHtml(platform, val){
+  const p=LINK_PLATFORMS.find(x=>x.key===platform)||LINK_PLATFORMS[0];
+  const opts=LINK_PLATFORMS.map(x=>'<option value="'+x.key+'"'+(x.key===p.key?' selected':'')+'>'+esc(x.name)+'</option>').join("");
+  return '<div class="ed-linkrow" draggable="true">'+
+    '<span class="ed-drag" title="drag to reorder">⠿</span>'+
+    '<select class="ed-platform" title="platform">'+opts+'</select>'+
+    '<img class="ed-picon" src="'+linkIcon(p.key)+'" alt="" onerror="this.style.display=\'none\'">'+
+    '<input class="ed-url" type="url" placeholder="https://..." value="'+esc(val||"")+'">'+
+    '<button class="ed-del" title="remove">✕</button></div>';
 }
 function openEditProfile(r){
   const mine=myGitHub();
   if(!mine)return;
+  editPanelOpen=true;
   const links=r.links||{};
   let editBio=r.bio||"";
   let editTier=r.tierIcon||"";
   let editProf=Object.assign({},r.profileTheme||{});
   let editIface=Object.assign({},THEME_DEFAULTS,r.interfaceTheme||{});
+  // snapshot the currently-applied interface theme so cancelling (X) reverts
+  const baseIface=lastAppliedTheme?Object.assign({},lastAppliedTheme):null;
+  // Pre-fill the GitHub link from the authenticated GitHub username (set by
+  // the gh CLI login / /auth/login) if the user hasn't added one yet. They can
+  // still add more links afterwards.
+  const mygh=myGitHub();
+  let prefill=normalizeLinks(links);
+  const hasGithub=prefill.some(l=>l.platform==="github");
+  if(mygh && !hasGithub){
+    prefill=prefill.concat([{platform:"github",url:"https://github.com/"+encodeURIComponent(mygh)}]);
+  }
+  // Links live in a single flat, order-preserving list so drag-and-drop can
+  // freely reorder them across platforms.
+  let linksHtml='<div class="ed-section"><h4>Links</h4>'+
+    '<div class="ed-links" id="ed-links">'+
+    prefill.map(l=>linkRowHtml(l.platform||"github",l.url)).join("")+
+    '</div><button class="ed-add" data-add="__any">+ Add link</button></div>';
 
-  let linksHtml="";
-  LINK_PLATFORMS.forEach(p=>{
-    const arr=links[p.key]||[];
-    let rows="";
-    arr.forEach(u=>rows+=linkRowHtml(p,u));
-    linksHtml+='<div class="ed-section"><h4>'+esc(p.name)+'</h4>'+
-      '<div class="ed-links" id="ed-links-'+p.key+'">'+rows+'</div>'+
-      '<button class="ed-add" data-add="'+p.key+'">+ Add '+esc(p.name)+'</button></div>';
-  });
-
-  const themeItems=[["bg","Background"],["panel","Panel BG"],["panel2","Button BG"],["panelHover","Hover BG"],
-    ["border","Border"],["borderDim","Row Border"],["accent","Highlight"],["text","Font Color"],
-    ["sub","Sub-fonts"],["green","Status Green"],["dev","DEV Gold"],["link","Link Color"],
-    ["linkHover","Link Hover"],["danger","Error Red"],["scroll","Scrollbar"],
-    ["rowMe","Your Row"],["rowCurrent","Current Rung"]];
-  let themeHtml=themeItems.map(([k,label])=>
-    '<div class="ed-theme-row"><label>'+label+'</label>'+
-    '<input type="color" data-theme="'+k+'" value="'+esc(editIface[k]||THEME_DEFAULTS[k])+'"></div>'
-  ).join("");
+  // Interface theme colors grouped by the surface they affect. Each group
+  // carries a preset dropdown (INTERFACE_PRESETS[key]) that fills its colors.
+  const themeGroups=[
+    ["main","Main interface",[["bg","Background"],["panel","Panel BG"],["panel2","Button BG"],
+      ["panelHover","Hover BG"],["border","Border"],["borderDim","Row Border"],
+      ["accent","Highlight"],["text","Font Color"],["sub","Sub-fonts"],
+      ["chip","Current Player"],["on","Enabled Buttons"],["scroll","Scrollbar"]]],
+    ["leaderboard","Leaderboard",[["rowMe","Your Row"],["rowCurrent","Current Rung"],
+      ["green","Status Green"],["dev","DEV Gold"]]],
+    ["chat","Chat box",[["link","Link Color"],["linkHover","Link Hover"],["time","Timestamps"]]],
+    ["canvas","Canvas / Scene",[["cvFloor","Floor"],["cvFloorAlt","Floor Alt"],["cvWall","Wall"],
+      ["cvWallTrim","Wall Trim"],["cvWindow","Window Frame"],["cvWindowGlass","Window Glass"],
+      ["cvWindowGlow","Window Glow"],["cvDesk","Desk"],["cvDeskDark","Desk Dark"],
+      ["cvDeskLeg","Desk Leg"],["cvMonitor","Monitor"],["cvScreen","Screen"],
+      ["cvPlant","Plant"],["cvPlantDark","Plant Dark"],["cvPot","Pot"]]],
+    ["agents","Pixel Agents",[["agSkin","Skin"],["agShirt","Shirt"],["agHair","Hair"]]],
+    ["other","Other",[["danger","Error Red"]]]
+  ];
+  let themeHtml=themeGroups.map(([gkey,cat,items])=>{
+    const presets=INTERFACE_PRESETS[gkey]||[];
+    const presetOpts=presetOptionsHtml(presets);
+    return '<div class="ed-cat">'+esc(cat)+'</div>'+
+      '<select class="ed-preset" data-preset-cat="'+gkey+'">'+presetOpts+'</select>'+
+      '<details class="ed-custom"><summary>Custom</summary><div class="ed-custom-body">'+
+      items.map(([k,label])=>
+        '<div class="ed-theme-row"><label>'+label+'</label>'+
+        '<input type="color" data-theme="'+k+'" value="'+esc(editIface[k]||THEME_DEFAULTS[k])+'"></div>'
+      ).join("")+'</div></details>';
+  }).join("");
   themeHtml+='<div class="ed-theme-row"><label>Font size (px)</label>'+
     '<input type="number" data-theme="fontSize" min="8" max="30" value="'+(editIface.fontSize||THEME_DEFAULTS.fontSize)+'"></div>';
   themeHtml+='<div class="ed-theme-row"><label>Font family</label>'+
-    '<input class="ed-input" data-theme="font" value="'+esc(editIface.font||THEME_DEFAULTS.font)+'"></div>';
+    '<select class="ed-input" data-theme="font">'+
+      FONT_OPTIONS.map(o=>'<option value="'+esc(o.value)+'"'+
+        ((editIface.font||THEME_DEFAULTS.font)===o.value||(editIface.font&&editIface.font.indexOf(o.value.replace(/'/g,""))>-1&&editIface.font.indexOf(o.value.split(",")[0].replace(/'/g,""))>-1)?' selected':'')+
+        '>'+esc(o.label)+'</option>').join("")+
+    '</select></div>';
 
   const avatar=ghAvatarFor(mine);
   const el=document.getElementById("edit");
@@ -857,11 +1309,29 @@ function openEditProfile(r){
       '<div class="ed-section">'+linksHtml+'</div>'+
       '<div class="ed-section">'+
         '<h4>Profile Theme</h4>'+
-        '<div class="ed-theme-row"><label>Profile accent color</label><input type="color" id="ed-proftheme" value="'+esc(editProf.color||"#e8c170")+'"></div>'+
+        (isDev(mine)?'<label class="ed-label" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+          '<input type="checkbox" id="ed-rainbow" style="width:auto;margin:0" '+
+          (editProf.rainbow?'checked':'')+'> Rainbow border (DEV)</label>':'')+
+        '<select class="ed-preset" id="ed-profpreset">'+presetOptionsHtml(PROFILE_PRESETS)+'</select>'+
+        '<details class="ed-custom"><summary>Custom</summary>'+
+          '<div class="ed-custom-body" id="ed-profilethemelist"></div>'+
+        '</details>'+
       '</div>'+
       '<div class="ed-section">'+
         '<h4>Interface Theme</h4>'+
+        '<div class="ed-master">Master Theme</div>'+
+        '<select class="ed-preset" id="ed-masterpreset">'+presetOptionsHtml(INTERFACE_PRESETS.main)+'</select>'+
+        '<details class="ed-subthemes"><summary>Sub-Themes</summary><div class="ed-subthemes-body">'+
         '<div id="ed-themelist">'+themeHtml+'</div>'+
+        '</div></details>'+
+      '</div>'+
+      '<div class="ed-section">'+
+        '<label class="ed-label" style="display:flex;align-items:center;gap:8px;margin-bottom:0">'+
+        '<input type="checkbox" id="ed-tierunlock" style="width:auto;margin:0"> '+
+        'Enable tier unlock notifications</label>'+
+        '<label class="ed-label" style="display:flex;align-items:center;gap:8px;margin-bottom:0;margin-top:6px">'+
+        '<input type="checkbox" id="ed-tierauto" style="width:auto;margin:0"> '+
+        'Always use new icon on unlock</label>'+
       '</div>'+
       '<div class="ed-section" style="border:none">'+
         '<button class="ed-save" id="ed-save">Save Profile</button>'+
@@ -870,6 +1340,18 @@ function openEditProfile(r){
     '</div>'+
     '<div class="ed-status" id="ed-status"></div>';
   document.getElementById("ed-bio").value=editBio;
+
+  // Profile theme color switchers (accent, border, popup bg, text, sub, link,
+  // green, dev) grouped under "Profile Theme". Values map onto the #prof popup.
+  const PROFILE_THEME_ITEMS=[["color","Accent"],["border","Border"],["bg","Popup BG"],
+    ["text","Font Color"],["sub","Sub-fonts"],["link","Link Color"],
+    ["green","Status Green"],["dev","DEV Gold"]];
+  const profThemeHtml=PROFILE_THEME_ITEMS.map(([k,label])=>{
+    const base=(k==="color")?editProf.color:(editProf[k]||(k==="border"?editProf.color:""));
+    return '<div class="ed-theme-row"><label>'+label+'</label>'+
+      '<input type="color" data-proftheme="'+k+'" value="'+esc(base||(k==="color"?"#e8c170":"#e8c170"))+'"></div>';
+  }).join("");
+  document.getElementById("ed-profilethemelist").innerHTML=profThemeHtml;
 
   const pick=document.getElementById("ed-tierpick");
   // Only tiers up to and including the user's current tier are unlocked.
@@ -898,33 +1380,173 @@ function openEditProfile(r){
   });
 
   function collectLinks(){
-    const out={};
-    document.querySelectorAll("#edit .ed-links").forEach(box=>{
-      const key=box.id.replace("ed-links-","");
-      out[key]=[...box.querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+    const out=[];
+    const box=document.getElementById("ed-links");
+    if(!box)return out;
+    [...box.querySelectorAll(".ed-linkrow")].forEach(row=>{
+      const sel=row.querySelector(".ed-platform");
+      const inp=row.querySelector(".ed-url");
+      const p=sel?sel.value:"github";
+      const u=inp?inp.value.trim():"";
+      if(u)out.push({platform:p,url:u});
     });
     return out;
   }
   function wireRow(row){
     const del=row.querySelector(".ed-del");
     if(del)del.onclick=()=>row.remove();
+    // Platform selector keeps the row's icon in sync.
+    const sel=row.querySelector(".ed-platform");
+    const icon=row.querySelector(".ed-picon");
+    if(sel)sel.onchange=()=>{ if(icon)icon.src=linkIcon(sel.value); };
+    // Drag-and-drop reordering within the flat link list (any platform).
+    let dragSrc=null;
+    // Make only the drag handle initiate a drag (inputs/buttons stay usable).
+    row.addEventListener("dragstart",e=>{
+      if(!e.target.closest(".ed-drag")){e.preventDefault();return;}
+      dragSrc=row; dragSrc.classList.add("dragging");
+      try{e.dataTransfer.setData("text/plain","");e.dataTransfer.effectAllowed="move";}catch(_){}
+    });
+    row.addEventListener("dragend",()=>{
+      if(dragSrc)dragSrc.classList.remove("dragging");
+      document.querySelectorAll("#edit .ed-linkrow").forEach(r=>r.classList.remove("drag-over"));
+      dragSrc=null;
+    });
+    row.addEventListener("dragover",e=>{
+      e.preventDefault();
+      const box=row.parentElement;
+      if(box&&box.id==="ed-links"&&dragSrc&&dragSrc.parentElement===box)row.classList.add("drag-over");
+    });
+    row.addEventListener("dragleave",()=>row.classList.remove("drag-over"));
+    row.addEventListener("drop",e=>{
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      if(!dragSrc||dragSrc===row||dragSrc.parentElement!==row.parentElement)return;
+      const box=row.parentElement;
+      const rows=[...box.querySelectorAll(".ed-linkrow")];
+      const from=rows.indexOf(dragSrc), to=rows.indexOf(row);
+      if(from<0||to<0)return;
+      box.insertBefore(dragSrc, from<to ? row.nextSibling : row);
+    });
+    // Prevent the drag handle from starting a drag when clicking the input/button
+    const handle=row.querySelector(".ed-drag");
+    if(handle)handle.addEventListener("mousedown",e=>e.stopPropagation());
   }
   document.querySelectorAll("#edit .ed-linkrow").forEach(wireRow);
   document.querySelectorAll("#edit .ed-add").forEach(b=>{
     b.onclick=()=>{
-      const p=LINK_PLATFORMS.find(x=>x.key===b.dataset.add);
-      const box=document.getElementById("ed-links-"+p.key);
-      box.insertAdjacentHTML("beforeend",linkRowHtml(p,""));
+      const box=document.getElementById("ed-links");
+      if(!box)return;
+      const first=LINK_PLATFORMS[0].key;
+      box.insertAdjacentHTML("beforeend",linkRowHtml(first,""));
       wireRow(box.lastElementChild);
     };
   });
 
-  document.getElementById("ed-proftheme").oninput=e=>{editProf.color=e.target.value;};
+  // Profile theme color switchers — update editProf + live-preview the popup
+  document.querySelectorAll("#edit [data-proftheme]").forEach(inp=>{
+    inp.oninput=()=>{
+      editProf[inp.dataset.proftheme]=inp.value;
+      if(inp.dataset.proftheme==="color"&&!editProf.border)editProf.border=inp.value;
+      const pp=document.getElementById("prof");
+      if(pp&&pp.classList.contains("open")){applyProfileTheme(pp,editProf);}
+    };
+  });
+  // Pre-built profile theme presets: fill EVERY swatch + preview the popup.
+  const profPreset=document.getElementById("ed-profpreset");
+  if(profPreset)profPreset.onchange=()=>{
+    const preset=PROFILE_PRESETS[parseInt(profPreset.value,10)];
+    if(!preset){return;}
+    // Update every visible profile-theme swatch (not just the keys a preset
+    // happens to carry), so a template always recolours the whole section.
+    PROFILE_THEME_ITEMS.forEach(([k])=>{
+      let v=preset.values[k];
+      if(v==null && k==="border")v=preset.values.color;
+      if(v==null)return;
+      editProf[k]=v;
+      const inp=document.querySelector('#edit [data-proftheme="'+k+'"]');
+      if(inp)inp.value=v;
+    });
+    const pp=document.getElementById("prof");
+    if(pp)applyProfileTheme(pp,editProf);
+    profPreset.value="";
+  };
+  // DEV rainbow border toggle — overrides whichever border color is set.
+  const rb=document.getElementById("ed-rainbow");
+  if(rb)rb.onchange=()=>{
+    editProf.rainbow=rb.checked;
+    const pp=document.getElementById("prof");
+    if(pp&&pp.classList.contains("open")){applyProfileTheme(pp,editProf);}
+  };
+  // Tier unlock notifications toggle
+  const tun=document.getElementById("ed-tierunlock");
+  tun.checked=(localStorage.getItem("pixelOfficeTierUnlockMuted")!=="1");
+  tun.onchange=()=>{
+    if(tun.checked){localStorage.removeItem("pixelOfficeTierUnlockMuted");}
+    else{localStorage.setItem("pixelOfficeTierUnlockMuted","1");}
+  };
+  // "Always use new icon on unlock" toggle
+  const tua=document.getElementById("ed-tierauto");
+  tua.checked=(localStorage.getItem("pixelOfficeTierAutoIcon")==="1");
+  tua.onchange=()=>{
+    if(tua.checked){localStorage.setItem("pixelOfficeTierAutoIcon","1");}
+    else{localStorage.removeItem("pixelOfficeTierAutoIcon");}
+  };
   document.querySelectorAll("#edit [data-theme]").forEach(inp=>{
     inp.oninput=()=>{
       const k=inp.dataset.theme;
       editIface[k]=(k==="fontSize")?parseInt(inp.value||THEME_DEFAULTS.fontSize):inp.value;
       applyInterfaceTheme(editIface);
+    };
+  });
+  // Master Theme: one selection applies a theme to EVERY interface category.
+  // The per-category preset arrays are built in lockstep (same index = same
+  // theme), so applying index idx across all categories is consistent.
+  const masterPreset=document.getElementById("ed-masterpreset");
+  if(masterPreset)masterPreset.onchange=()=>{
+    const idx=parseInt(masterPreset.value,10);
+    if(isNaN(idx))return;
+    themeGroups.forEach(([gkey])=>{
+      const preset=(INTERFACE_PRESETS[gkey]||[])[idx];
+      if(!preset)return;
+      const group=themeGroups.find(g=>g[0]===gkey);
+      const keys=(group?group[2]:[]).map(x=>x[0]);
+      keys.forEach(k=>{
+        if(preset.values[k]!=null){
+          editIface[k]=preset.values[k];
+          const inp=document.querySelector('#edit [data-theme="'+k+'"]');
+          if(inp)inp.value=preset.values[k];
+        }
+      });
+      // reflect the chosen theme in each sub-theme dropdown
+      const sel=document.querySelector('#edit .ed-preset[data-preset-cat="'+gkey+'"]');
+      if(sel)sel.value=String(idx);
+    });
+    applyInterfaceTheme(editIface);
+    masterPreset.value="";
+  };
+  // Pre-built theme presets: fill the whole category's color pickers + apply.
+  // Only interface-theme selects carry data-preset-cat; the profile-theme
+  // select (#ed-profpreset) is handled by its own handler above, so skip it
+  // here or it would overwrite that handler.
+  document.querySelectorAll("#edit .ed-preset").forEach(sel=>{
+    if(!sel.dataset.presetCat)return;
+    sel.onchange=()=>{
+      const gkey=sel.dataset.presetCat;
+      const preset=(INTERFACE_PRESETS[gkey]||[])[parseInt(sel.value,10)];
+      if(!preset){return;}
+      // update editIface + the visible color inputs for every key in the preset
+      const group=themeGroups.find(g=>g[0]===gkey);
+      const keys=(group?group[2]:[]).map(x=>x[0]);
+      keys.forEach(k=>{
+        if(preset.values[k]!=null){
+          editIface[k]=preset.values[k];
+          const inp=document.querySelector('#edit [data-theme="'+k+'"]');
+          if(inp)inp.value=preset.values[k];
+        }
+      });
+      applyInterfaceTheme(editIface);
+      sel.value="";
     };
   });
 
@@ -947,6 +1569,7 @@ function openEditProfile(r){
     // best-effort server sync (persists server-side after a Hermes restart)
     fetch("profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .catch(()=>{});
+    editPanelOpen=false;
     pollNow();
   };
   const logoutBtn=document.getElementById("ed-logout");
@@ -954,12 +1577,22 @@ function openEditProfile(r){
     try{localStorage.removeItem(localProfileKey());}catch(e){}
     try{localStorage.removeItem("pixelOfficeTheme");}catch(e){}
     applyInterfaceTheme(null);
+    editPanelOpen=false;
     togglePanel("edit",false);
     fetch("identify",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({github:""})})
       .then(()=>pollNow()).catch(()=>pollNow());
   };
-  el.querySelector(".pclose").onclick=()=>togglePanel("edit",false);
+  el.querySelector(".pclose").onclick=()=>{
+    // Cancel: revert live interface-theme + profile-theme previews to the
+    // state that was applied when the panel opened (only Save persists).
+    editPanelOpen=false;
+    if(baseIface)applyInterfaceTheme(baseIface);
+    const pp=document.getElementById("prof");
+    if(pp){["--border","--accent","--panel","--panel2","--text","--sub",
+      "--link","--green","--dev"].forEach(v=>pp.style.removeProperty(v));}
+    togglePanel("edit",false);
+  };
   togglePanel("edit",true);
 }
 
@@ -1058,12 +1691,21 @@ function chatMsgHtml(m){
   const tier=(tIcon)
     ? '<span class="ctierl"><img src="'+iconPath(tIcon)+'" alt="" onerror="this.style.display=\'none\'"><b>#'+esc(tierNo)+'</b></span>'
     : '';
+  // DEV rainbow: if this sender has rainbow enabled in their profile theme,
+  // render their chat name with the animated rainbow gradient.
+  let rainbow=false;
+  if(gh&&m.github){
+    const g=String(m.github).toLowerCase();
+    const board=mergeBoards(currentBoard(),loadCachedBoard());
+    const row=board.find(r=>r.github&&String(r.github).toLowerCase()===g);
+    if(row&&row.profileTheme&&row.profileTheme.rainbow)rainbow=true;
+  }
   return '<div class="cmsg"'+(m.github?' data-github="'+esc(m.github)+'" title="open profile"':'')+'>'+
     tier+
     (m.avatar?'<img class="cav" src="'+esc(m.avatar)+'" alt="">':'<div class="cav gh"></div>')+
     '<div class="cbody"><div class="cuser">'+
     (m.url?'<a href="'+esc(m.url)+'" target="_blank" rel="noopener">':"")+
-    '<span style="color:'+(gh?"#ffd700":"#e8c170")+'">'+esc(m.user||"guest")+'</span>'+
+    '<span'+(rainbow?' class="rainbow-name"':' style="color:'+(gh?"#ffd700":"#e8c170")+'"')+'>'+esc(m.user||"guest")+'</span>'+
     (gh?' <span style="font-size:8px;color:#ffd700;border:1px solid #ffd70066;border-radius:2px;padding:0 3px">DEV</span>':'')+
     (m.url?'</a>':"")+
     ' <span class="ctime">'+timeStr(ts/1000)+'</span></div>'+
@@ -1261,7 +1903,7 @@ function applyState(st){
     myRow=(st.leaderboard||[]).find(r=>r.github&&
       String(r.github).toLowerCase()===String(state.identity.github).toLowerCase());
   }
-  if(myRow && myRow.interfaceTheme && Object.keys(myRow.interfaceTheme).length){
+  if(myRow && myRow.interfaceTheme && Object.keys(myRow.interfaceTheme).length && !editPanelOpen){
     applyInterfaceTheme(myRow.interfaceTheme);
   }
   syncP2P();

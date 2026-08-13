@@ -144,6 +144,35 @@ def _key_path() -> Path:
     return _office_dir() / "instance.key"
 
 
+# Hermes' own session store (the same state.db the session_search tool and
+# Hermes Desktop read). We report this real count instead of only the sessions
+# observed in this office's event log, which only sees sessions that fired a
+# hook while the plugin was running.
+_SESSION_COUNT_CACHE = {"ts": 0.0, "n": None}
+
+
+def _hermes_session_count() -> Optional[int]:
+    """Return the number of sessions in Hermes' session DB (cached ~20s)."""
+    global _SESSION_COUNT_CACHE
+    now = time.time()
+    if now - _SESSION_COUNT_CACHE["ts"] < 20:
+        return _SESSION_COUNT_CACHE["n"]
+    n = None
+    try:
+        import sqlite3
+        db = get_hermes_home() / "state.db"
+        if db.exists():
+            conn = sqlite3.connect(str(db))
+            try:
+                n = int(conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0])
+            finally:
+                conn.close()
+    except Exception:
+        n = None
+    _SESSION_COUNT_CACHE = {"ts": now, "n": n}
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Instance Ed25519 key (for signing ledger blocks)
 # ---------------------------------------------------------------------------
@@ -899,6 +928,19 @@ def build_state() -> Dict[str, Any]:
     rows, global_stats = _fold_leaderboard(events, registry)
     identity = _load_identity()
     chat = _read_chat()
+
+    # Report Hermes' real session count (the same store Hermes Desktop sees)
+    # instead of only the sessions observed in this office's event log. All
+    # local agents fold into the connected office identity, so its session
+    # tally should equal Hermes' actual session count.
+    real_sessions = _hermes_session_count()
+    ident_gh = (identity or {}).get("github")
+    if real_sessions is not None and ident_gh:
+        for r in rows:
+            if str(r.get("github") or "").lower() == str(ident_gh).lower():
+                r["sessions"] = real_sessions
+                r["tier"] = _tier_for_user(r["ops"], r["tools"], r["sessions"])
+        global_stats["sessions"] = sum(r["sessions"] for r in rows)
 
     agents: Dict[str, Dict[str, Any]] = {}
 
