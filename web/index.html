@@ -56,7 +56,7 @@
   /* leaderboard */
   #lb{right:12px;top:12px;width:max-content;min-width:360px;max-width:94%;max-height:78%;bottom:auto}
   #lb-list{overflow-y:auto;flex:1;min-height:0}
-  .lb-row{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  .lb-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;
     border-bottom:1px solid var(--borderDim);cursor:pointer}
   .lb-row:hover{background:var(--panelHover)}
   .lb-row.me{background:var(--rowMe)}
@@ -66,34 +66,39 @@
     border:1px solid var(--border);border-radius:3px;background:var(--bg);object-fit:contain}
   .lb-tiernum{width:30px;color:var(--sub);font-size:.833em;flex-shrink:0;text-align:center}
   .lb-row.me .lb-tiernum{color:var(--accent)}
-  .lb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  .lb-name{flex:1 1 6em;min-width:6em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     color:var(--text)}
   .lb-name.dev{color:var(--dev)}
   .lb-dev{color:var(--dev);font-size:.833em;border:1px solid var(--dev);border-radius:3px;
     padding:0 4px;margin-left:4px;flex-shrink:0}
-  .lb-ops{text-align:right;flex-shrink:0}
+  .lb-stats{margin-left:auto;flex:0 0 auto;display:flex;align-items:baseline;gap:14px;
+    white-space:nowrap}
+  .lb-meta{color:var(--sub);font-size:.833em;flex-shrink:0;text-align:right;white-space:nowrap}
+  .lb-ops{text-align:right;flex-shrink:0;white-space:nowrap}
   .lb-ops b{color:var(--accent)}
-  .lb-ops .lbl{color:var(--sub);font-size:.833em;display:block}
-  .lb-meta{color:var(--sub);font-size:.833em;flex-shrink:0;text-align:right}
+  .lb-ops .lbl{color:var(--sub);font-size:.833em;display:inline;margin-left:4px}
   /* model leaderboard (jekyll-hyde correction tallies) */
   #mb{left:12px;top:12px;width:max-content;min-width:340px;max-width:94%;max-height:78%;bottom:auto}
   #mb-list{overflow-y:auto;flex:1;min-height:0}
-  .mb-row{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  .mb-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;
     border-bottom:1px solid var(--borderDim)}
   .mb-rank{width:22px;color:var(--sub);font-weight:bold;flex-shrink:0}
   .mb-rank.top{color:var(--accent)}
-  .mb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  .mb-name{flex:1 1 8em;min-width:6em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     color:var(--text)}
-  .mb-corr{text-align:right;flex-shrink:0}
-  .mb-corr b{color:var(--accent)}
-  .mb-corr .lbl{color:var(--sub);font-size:.833em;display:block}
-  .mb-badge{color:var(--green);font-size:.833em;border:1px solid var(--green);border-radius:3px;
-    padding:0 4px;flex-shrink:0}
-  .mb-break{display:flex;flex-direction:column;gap:1px;align-items:flex-end;flex-shrink:0}
+  .mb-stats{margin-left:auto;flex:0 0 auto;display:flex;align-items:baseline;gap:14px;
+    white-space:nowrap}
+  .mb-break{display:flex;align-items:baseline;gap:7px;flex-shrink:0;white-space:nowrap}
+  .mb-sep{color:var(--border)}
   .mb-ver{font-size:.75em;color:var(--sub);white-space:nowrap}
   .mb-ver.sbg{color:#d84f6f}
   .mb-ver.gen{color:var(--green)}
   .mb-ver.unc{color:var(--sub)}
+  .mb-corr{text-align:right;flex-shrink:0;white-space:nowrap}
+  .mb-corr b{color:var(--accent)}
+  .mb-corr .lbl{color:var(--sub);font-size:.833em;display:inline;margin-left:4px}
+  .mb-badge{color:var(--green);font-size:.833em;border:1px solid var(--green);border-radius:3px;
+    padding:0 4px;flex-shrink:0}
   .mb-empty{color:var(--sub);padding:12px;font-size:.833em;text-align:center}
   .mb-cta{padding:10px 12px;border-top:1px solid var(--borderDim);text-align:center}
   .mb-cta .ab-link{display:inline-flex;align-items:center;gap:6px;color:var(--accent);
@@ -1057,8 +1062,10 @@ function tierRowHtml(r){
     '<img class="lb-tier" src="'+iconPath(tIcon)+'" alt="" onerror="this.style.visibility=\'hidden\'">'+
     '<span class="lb-name'+(dev?" dev":"")+'">'+esc(r.name)+
       (dev?'<span class="lb-dev">DEV</span>':'')+'</span>'+
-    '<span class="lb-meta">'+fmtNum(r.tools)+' calls<br>'+fmtTime(r.time_s)+'</span>'+
-    '<span class="lb-ops"><b>'+fmtNum(r.ops)+'</b><span class="lbl">Ops · '+esc(tier.name)+'</span></span>'+
+    '<span class="lb-stats">'+
+      '<span class="lb-meta">'+fmtNum(r.tools)+' calls · '+fmtTime(r.time_s)+'</span>'+
+      '<span class="lb-ops"><b>'+fmtNum(r.ops)+'</b><span class="lbl">Ops · '+esc(tier.name)+'</span></span>'+
+    '</span>'+
     '</div>';
 }
 // ── merged leaderboard (local live score + P2P peer scores) ────────────
@@ -1091,11 +1098,23 @@ function mergeBoards(live, cached){
 }
 function loadCachedBoard(){ try{return JSON.parse(localStorage.getItem(LS_BOARD)||"[]")}catch(e){return []} }
 function saveCachedBoard(rows){ try{localStorage.setItem(LS_BOARD,JSON.stringify(rows.slice(0,50)))}catch(e){} }
+// _lbHTML caches the last-rendered board. renderLeaderboard() is called on
+// every poll tick + every P2P score packet; skipping the DOM rebuild when the
+// rows are unchanged stops the tier icons from flickering (they were being
+// recreated on each call, re-triggering image load/decode).
+let _lbHTML=null;
 function renderLeaderboard(){
   const el=document.getElementById("lb-list");
   const board=mergeBoards(currentBoard(),loadCachedBoard());
-  if(!board.length){el.innerHTML='<div class="pempty">connect a GitHub username to show on the leaderboard</div>';return;}
-  el.innerHTML=board.map(tierRowHtml).join("");
+  if(!board.length){
+    const h='<div class="pempty">connect a GitHub username to show on the leaderboard</div>';
+    if(el.innerHTML!==h)el.innerHTML=h;
+    _lbHTML=null;return;
+  }
+  const html=board.map(tierRowHtml).join("");
+  if(html===_lbHTML)return;
+  _lbHTML=html;
+  el.innerHTML=html;
   el.querySelectorAll(".lb-row").forEach(row=>{
     row.onclick=()=>showProfile(row.dataset.id);
   });
@@ -1141,37 +1160,42 @@ function mergedModelBoard(){
   out.forEach(function(r,i){r.rank=i+1;});
   return {installed: rows.size>0, models:out};
 }
+// _mbHTML caches the last-rendered board (same flicker-guard as the leaderboard).
+let _mbHTML=null;
 function renderModelBoard(){
   const el=document.getElementById("mb-list");
   if(!el)return;
   const mb=mergedModelBoard();
   const installed=mb.installed;
   const models=mb.models || [];
+  let html;
   if(!installed){
-    el.innerHTML='<div class="mb-empty">The Model Leaderboard is powered by the Jekyll-Hyde audit engine — install it to start recording corrections.</div>'+
+    html='<div class="mb-empty">The Model Leaderboard is powered by the Jekyll-Hyde audit engine — install it to start recording corrections.</div>'+
       '<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> To contribute, download Jekyll-Hyde</a></div>';
-    return;
-  }
-  if(!models.length){
-    el.innerHTML='<div class="mb-empty">Jekyll-Hyde is installed but hasn\'t audited a model yet — it records a correction every time it activates.</div>'+
+  }else if(!models.length){
+    html='<div class="mb-empty">Jekyll-Hyde is installed but hasn\'t audited a model yet — it records a correction every time it activates.</div>'+
       '<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> Jekyll-Hyde</a></div>';
-    return;
+  }else{
+    const rows=models.map(r=>{
+      const top=r.rank<=3;
+      const clean=esc(r.model||"unknown");
+      const last=r.last_corrected?' · '+timeAgo(r.last_corrected):'';
+      return '<div class="mb-row">'+
+        '<span class="mb-rank'+(top?" top":"")+'">'+r.rank+'</span>'+
+        '<span class="mb-name">'+clean+'</span>'+
+        '<span class="mb-stats">'+
+          '<span class="mb-break"><span class="mb-ver sbg">'+fmtNum(r.sandbagged)+' sandbag</span>'+
+            '<span class="mb-sep">·</span><span class="mb-ver gen">'+fmtNum(r.genuine)+' genuine</span>'+
+            '<span class="mb-sep">·</span><span class="mb-ver unc">'+fmtNum(r.uncertain)+' ?</span></span>'+
+          '<span class="mb-corr"><b>'+fmtNum(r.corrections)+'</b><span class="lbl">'+(r.corrections===1?'correction':'corrections')+(last||'')+'</span></span>'+
+        '</span>'+
+        '</div>';
+    }).join("");
+    html=rows+'<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> To contribute, download Jekyll-Hyde</a></div>';
   }
-  const rows=models.map(r=>{
-    const top=r.rank<=3;
-    const clean=esc(r.model||"unknown");
-    const last=r.last_corrected?' · '+timeAgo(r.last_corrected):'';
-    return '<div class="mb-row">'+
-      '<span class="mb-rank'+(top?" top":"")+'">'+r.rank+'</span>'+
-      '<span class="mb-name">'+clean+'</span>'+
-      '<span class="mb-break"><span class="mb-ver sbg">'+fmtNum(r.sandbagged)+' sandbag</span>'+
-        '<span class="mb-ver gen">'+fmtNum(r.genuine)+' genuine</span>'+
-        '<span class="mb-ver unc">'+fmtNum(r.uncertain)+' ?</span></span>'+
-      '<span class="mb-corr"><b>'+fmtNum(r.corrections)+'</b><span class="lbl">'+(r.corrections===1?'correction':'corrections')+(last||'')+'</span></span>'+
-      '</div>';
-  }).join("");
-  const foot='<div class="mb-cta"><a class="ab-link" href="'+JH_REPO+'" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display=\'none\'"> To contribute, download Jekyll-Hyde</a></div>';
-  el.innerHTML=rows+foot;
+  if(html===_mbHTML)return;
+  _mbHTML=html;
+  el.innerHTML=html;
 }
 function timeAgo(ts){
   const s=Math.floor((Date.now()/1000)-ts);
@@ -1729,6 +1753,10 @@ function myTierName(){
   const my=board.find(r=>isMe(r.id));
   return my ? (tierForOps(my.ops,my.tools,my.sessions) || my.tier) : null;
 }
+// _tiersSig guards against rebuilding all 500 icon rows on every poll tick /
+// P2P packet. The ladder content only changes when the viewer's rung moves
+// (myIdx), so skip the DOM rebuild when it hasn't — stops the icons flickering.
+let _tiersSig=null;
 function renderTiers(){
   const el=document.getElementById("tier-list");
   // Prefer the static full ladder shipped in tiers.js (all 500 icons) so the
@@ -1736,9 +1764,12 @@ function renderTiers(){
   const tiers=(window.OFFICE_TIERS && window.OFFICE_TIERS.length)
     ? window.OFFICE_TIERS
     : (state && state.tiers ? state.tiers : []);
-  if(!tiers.length){el.innerHTML='<div class="pempty">tiers unavailable</div>';return;}
+  if(!tiers.length){el.innerHTML='<div class="pempty">tiers unavailable</div>';_tiersSig=null;return;}
   const myTier=myTierName();
   const myIdx=myTier?myTier.t-1:-1;
+  const sig=tiers.length+":"+myIdx+(tiers[0]?tiers[0].t:"");
+  if(sig===_tiersSig)return;
+  _tiersSig=sig;
   el.innerHTML=tiers.map((t,i)=>{
     const reached=myTier?i<=myIdx:false;
     const current=i===myIdx;
