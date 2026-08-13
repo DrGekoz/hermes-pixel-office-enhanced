@@ -5,6 +5,14 @@
 // signaling handshake (presence + SDP offer/answer exchange via
 // the local plugin server), so peers can find each other.
 // No score/chat message ever touches GitHub once channels open.
+//
+// Instrumented + hardened (2026-08-13): mirrors the Hermes
+// IdleViber console logging pattern ("📡 P2P: ...") so every
+// connection / message / disconnect / backoff is visible in the
+// browser console, and adds input validation, message-size caps,
+// a connect-timeout reconnect backoff, a max-peer cap and
+// try/catch on every handler so a bad peer can never crash the
+// mesh or corrupt the board.
 // ============================================================
 
 window.PixelOfficeP2P = (function () {
@@ -16,9 +24,11 @@ window.PixelOfficeP2P = (function () {
       { urls: "stun:stun1.l.google.com:19302" },
     ],
   };
-  var POLL_MS = 4000;      // signaling poll (handshake)
+  var POLL_MS = 4000;        // signaling poll (handshake)
   var REBROADCAST_MS = 5000; // keep peers' scores fresh
   var CONNECT_TIMEOUT = 8000;
+  var MAX_MSG = 65536;       // max inbound data-channel message (bytes)
+  var MAX_PEERS = 12;        // cap concurrent connections
 
   var me = null;             // {id, github, name, avatar, url}
   var peers = new Map();     // id -> {pc, channel, connected, entry, timer}
@@ -32,6 +42,20 @@ window.PixelOfficeP2P = (function () {
   var started = false;
   var pollTimer = null;
   var rebroadcastTimer = null;
+  var backoff = new Map();   // peerId -> {attempts, next}
+
+  // ---- tiny logging helpers (IdleViber "📡 P2P:" style) ----------------
+  function short(id) { return String(id || "").substr(0, 8); }
+  function log() {
+    var a = Array.prototype.slice.call(arguments);
+    a.unshift("📡 P2P:");
+    console.log.apply(console, a);
+  }
+  function warn() {
+    var a = Array.prototype.slice.call(arguments);
+    a.unshift("📡 P2P:");
+    console.warn.apply(console, a);
+  }
 
   // ---- small helpers -------------------------------------------------
   function post(path, body) {
@@ -55,6 +79,7 @@ window.PixelOfficeP2P = (function () {
         avatar: identity.avatar || "",
         url: identity.url || "https://github.com/" + identity.github,
       };
+      log("identity set:", me.github);
     } else {
       me = null;
     }
@@ -101,56 +126,98 @@ window.PixelOfficeP2P = (function () {
   }
 
   // ---- mesh primitives ------------------------------------------------
-  function broadcastMsg(msg) {
+  function broadcastMsg(msg, silent) {
     var s = JSON.stringify(msg);
+    var sent = 0;
     peers.forEach(function (p) {
       if (p.channel && p.channel.readyState === "open") {
-        try { p.channel.send(s); } catch (_) {}
+        try { p.channel.send(s); sent++; } catch (_) {}
       }
     });
+    if (!silent) log("send", msg.type, "->", sent, "peer(s)");
+    return sent;
   }
 
-  function handleMessage(peerId, msg) {
-    try { msg = JSON.parse(msg); } catch (_) { return; }
-    if (msg.type === "score" && msg.entry && msg.entry.id) {
-      // keep the freshest score per peer (higher counter wins)
-      var prev = entries.get(msg.entry.id);
-      if (!prev || (msg.entry.counter || 0) >= (prev.counter || 0)) {
-        entries.set(msg.entry.id, msg.entry);
+  function handleMessage(peerId, raw) {
+    // Harden: drop empty/oversized payloads before parsing.
+    if (!raw || typeof raw !== "string" || raw.length > MAX_MSG) return;
+    var msg;
+    try { msg = JSON.parse(raw); } catch (e) { return; }
+    if (!msg || typeof msg !== "object") return;
+
+    if (msg.type === "score" && msg.entry &&
+        typeof msg.entry.id === "string" && msg.entry.id &&
+        msg.entry.id.length <= 200) {
+      var eid = msg.entry.id;
+      if (eid === me.id) return;              // ignore our own echoed entry
+      var prev = entries.get(eid);
+      var c = Number(msg.entry.counter) || 0;
+      if (!prev || c >= (Number(prev.counter) || 0)) {
+        entries.set(eid, msg.entry);
+        log("score recv", short(eid), "ops=" + (msg.entry.ops || 0), "counter=" + c);
         scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
       }
-    } else if (msg.type === "chat") {
+    } else if (msg.type === "chat" && typeof msg.text === "string" && msg.text) {
       msg.ts = msg.ts || Date.now();
       msg.peer = peerId;
       peerChat.push(msg);
       if (peerChat.length > 200) peerChat = peerChat.slice(-200);
+      log("chat recv from", short(peerId), ":", msg.text.slice(0, 60));
       chatHandlers.forEach(function (cb) { try { cb(msg); } catch (_) {} });
     }
   }
 
+  function noteBackoff(peerId) {
+    var b = backoff.get(peerId) || { attempts: 0, next: 0 };
+    b.attempts++;
+    // exponential: 3s, 6s, 12s, 24s, 48s, capped at 60s
+    var wait = Math.min(60000, 3000 * Math.pow(2, Math.min(b.attempts, 5)));
+    b.next = Date.now() + wait;
+    backoff.set(peerId, b);
+    warn("backoff", short(peerId), "for", wait + "ms", "(attempt " + b.attempts + ")");
+  }
+  function backoffAllowed(peerId) {
+    var b = backoff.get(peerId);
+    if (!b) return true;
+    if (Date.now() >= b.next) { backoff.delete(peerId); return true; }
+    return false;
+  }
+
   function attachChannel(peerId, pc, channel) {
+    if (!peerId || !pc || !channel) { warn("attachChannel: bad args"); return; }
     var peer = { pc: pc, channel: channel, connected: false };
     peers.set(peerId, peer);
 
     channel.onopen = function () {
       peer.connected = true;
       connecting.delete(peerId);
+      backoff.delete(peerId);
+      log("connected to peer", short(peerId));
       // On connect, hand the peer our current score immediately.
       if (lastEntry) {
         try { channel.send(JSON.stringify({ type: "score", entry: lastEntry })); } catch (_) {}
       }
       scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
     };
-    channel.onmessage = function (ev) { handleMessage(peerId, ev.data); };
-    channel.onclose = function () { teardown(peerId); };
+    channel.onmessage = function (ev) {
+      try { handleMessage(peerId, ev && ev.data); }
+      catch (e) { warn("msg handler error:", e && e.message); }
+    };
+    channel.onerror = function (ev) { warn("channel error", short(peerId)); };
+    channel.onclose = function () { log("closed peer", short(peerId)); teardown(peerId); };
     pc.oniceconnectionstatechange = function () {
       if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+        warn("ice", pc.iceConnectionState, short(peerId));
+        noteBackoff(peerId);
         teardown(peerId);
       }
     };
     if (peer.timer) clearTimeout(peer.timer);
     peer.timer = setTimeout(function () {
-      if (!peer.connected) teardown(peerId);
+      if (!peer.connected) {
+        noteBackoff(peerId);
+        teardown(peerId);
+      }
     }, CONNECT_TIMEOUT);
   }
 
@@ -160,6 +227,7 @@ window.PixelOfficeP2P = (function () {
       if (p.channel) { try { p.channel.close(); } catch (_) {} }
       if (p.pc) { try { p.pc.close(); } catch (_) {} }
       if (p.timer) clearTimeout(p.timer);
+      log("teardown peer", short(peerId));
     }
     peers.delete(peerId);
     connecting.delete(peerId);
@@ -168,82 +236,113 @@ window.PixelOfficeP2P = (function () {
   }
 
   function initiate(peerId) {
+    if (!peerId) return;
+    if (peers.has(peerId) || connecting.has(peerId)) return;
+    if (connecting.size >= MAX_PEERS) { warn("peer cap reached, skipping", short(peerId)); return; }
+    if (!backoffAllowed(peerId)) return;
     connecting.add(peerId);
     var pc;
     try {
       pc = new RTCPeerConnection(ICE);
-    } catch (e) { connecting.delete(peerId); return; }
+    } catch (e) { connecting.delete(peerId); warn("RTCPeerConnection init failed:", e && e.message); return; }
     var channel = pc.createDataChannel("office");
     attachChannel(peerId, pc, channel);
+    log("offering to peer", short(peerId));
     pc.createOffer().then(function (offer) {
       return pc.setLocalDescription(offer);
     }).then(function () {
       return post("signaling/offer", { to: peerId, sdp: pc.localDescription });
-    }).catch(function () { teardown(peerId); });
+    }).catch(function (err) {
+      warn("offer creation failed:", err && err.message);
+      noteBackoff(peerId);
+      teardown(peerId);
+    });
   }
 
   function answer(peerId, sdp) {
+    if (!peerId || !sdp) { warn("answer: bad args from", short(peerId)); return; }
+    if (peers.has(peerId) || connecting.has(peerId)) return;
+    if (connecting.size >= MAX_PEERS) { warn("peer cap reached, skipping", short(peerId)); return; }
     connecting.add(peerId);
     var pc;
     try {
       pc = new RTCPeerConnection(ICE);
-    } catch (e) { connecting.delete(peerId); return; }
+    } catch (e) { connecting.delete(peerId); warn("RTCPeerConnection init failed:", e && e.message); return; }
     pc.ondatachannel = function (ev) { attachChannel(peerId, pc, ev.channel); };
+    log("answering peer", short(peerId));
     pc.setRemoteDescription(new RTCSessionDescription(sdp)).then(function () {
       return pc.createAnswer();
     }).then(function (answer) {
       return pc.setLocalDescription(answer);
     }).then(function () {
       return post("signaling/answer", { to: peerId, sdp: pc.localDescription });
-    }).catch(function () { teardown(peerId); });
+    }).catch(function (err) {
+      warn("answer creation failed:", err && err.message);
+      noteBackoff(peerId);
+      teardown(peerId);
+    });
   }
 
   // ---- signaling poll (presence + inbox) ------------------------------
   function pollSignaling() {
     if (!started || !me) return;
     get("signaling/state").then(function (st) {
+      if (!st || typeof st !== "object") return;
       var pl = st.peers || {};
       Object.keys(pl).forEach(function (id) {
-        if (id === me.id) return;
+        if (!id || id === me.id) return;
         if (peers.has(id) || connecting.has(id)) return;
-        if (pl[id].online) initiate(id);
+        if (!pl[id].online) return;
+        // Glare avoidance: when two peers come online at the same instant both
+        // would initiate and create a duplicate connection pair. Only the
+        // lexicographically-smaller id initiates; the larger id waits for that
+        // peer's offer and answers it (deterministic initiator).
+        if (me.id < id && backoffAllowed(id)) initiate(id);
       });
       var offers = st.offers || {};
       var any = false;
       Object.keys(offers).forEach(function (fromId) {
-        if (fromId === me.id) return;
+        if (!fromId || fromId === me.id) return;
         if (peers.has(fromId) || connecting.has(fromId)) return;
-        any = true;
-        answer(fromId, offers[fromId].sdp);
+        var sdp = offers[fromId] && offers[fromId].sdp;
+        if (sdp) { any = true; answer(fromId, sdp); }
       });
       if (any) post("signaling/clear", {}); // consume handled offers
 
       // We are the initiator: apply answers our peers sent for our offers.
       var answers = st.answers || {};
       Object.keys(answers).forEach(function (fromId) {
+        if (!fromId) return;
         var p = peers.get(fromId);
         if (!p || p.connected) return;
         if (p.pc && p.pc.signalingState === "have-local-offer") {
-          try {
-            p.pc.setRemoteDescription(new RTCSessionDescription(answers[fromId].sdp));
-          } catch (_) {}
-          post("signaling/clear", {});
+          var sdp = answers[fromId] && answers[fromId].sdp;
+          if (sdp) {
+            try {
+              p.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            } catch (e) { warn("apply answer failed:", e && e.message); }
+            post("signaling/clear", {});
+          }
         }
       });
-    }).catch(function () {});
+    }).catch(function (err) { warn("signaling poll error:", err && err.message); });
   }
 
   // ---- public API -----------------------------------------------------
   function start(identity) {
     setMe(identity);
-    if (!me) return;
+    if (!me) { warn("start: no identity"); return; }
     started = true;
+    log("starting, ID", short(me.id));
     post("signaling/register", { online: true });
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(pollSignaling, POLL_MS);
     if (rebroadcastTimer) clearInterval(rebroadcastTimer);
     rebroadcastTimer = setInterval(function () {
-      if (lastEntry) broadcastMsg({ type: "score", entry: lastEntry });
+      if (lastEntry) {
+        var n = broadcastMsg({ type: "score", entry: lastEntry }, true);
+        console.debug("📡 P2P: rebroadcast score to", n, "peer(s)");
+      }
     }, REBROADCAST_MS);
   }
 
@@ -252,7 +351,9 @@ window.PixelOfficeP2P = (function () {
     if (pollTimer) clearInterval(pollTimer);
     if (rebroadcastTimer) clearInterval(rebroadcastTimer);
     peers.forEach(function (_p, id) { teardown(id); });
+    backoff.clear();
     post("signaling/register", { online: false });
+    log("stopped");
   }
 
   // Merge our live local row + all peer entries into a ranked board.
@@ -290,7 +391,7 @@ window.PixelOfficeP2P = (function () {
   }
 
   function sendChat(text) {
-    if (!text.trim()) return;
+    if (!text || !text.trim()) return;
     var msg = {
       type: "chat",
       user: me ? me.name : "guest",
@@ -306,6 +407,7 @@ window.PixelOfficeP2P = (function () {
     peerChat.push(msg);
     if (peerChat.length > 200) peerChat = peerChat.slice(-200);
     broadcastMsg(msg);
+    log("chat sent:", msg.text.slice(0, 60));
     chatHandlers.forEach(function (cb) { try { cb(msg); } catch (_) {} });
     return msg;
   }
