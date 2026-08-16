@@ -540,20 +540,33 @@ window.PixelOfficeP2P = (function () {
         broadcastMsg({ type: "score", entry: lastEntry }, true);
       }
     }, REBROADCAST_MS);
-    // Gist persistence (durable snapshot). We ALWAYS publish our latest score
-    // entry to the shared gist on a 10-minute cadence, REGARDLESS of whether
-    // we're connected to peers over WebRTC. P2P data channels are realtime and
-    // fast, but they're unreliable (ordered:false / maxRetransmits:0) and can
-    // be blocked by CGNAT — the gist snapshot is what lets a late/remote player
-    // still see our score. Sending the FULL entry (not the trimmed fallback)
-    // persists everything that rides in a score packet (tier, bio, links,
-    // themes, agents, modelboard). The gist write is owner-only + separately
-    // rate-limited, so 10min/instance is a safe cadence.
+    // Gist persistence (durable snapshot). Adaptive cadence:
+    //   * No peer connected over WebRTC  -> post to the gist every 10 seconds
+    //     so a standalone/late player's score is always fresh and visible to
+    //     anyone who checks the board.
+    //   * At least one peer connected    -> post every 10 minutes. P2P data
+    //     channels carry realtime scores in the meantime; the 10-min snapshot
+    //     is the durable fallback for anyone who connects later or can't reach
+    //     us (CGNAT), without burning the owner-write-only, rate-limited gist
+    //     quota.
+    // Sends the FULL entry (score + tier, bio, links, themes, agents,
+    // modelboard), persisting everything that rides in a score packet.
+    var GIST_FAST_MS = 10000;   // 10s when no peer connected
+    var GIST_SLOW_MS = 600000;  // 10min when connected
+    var gistLastPost = 0;
     if (fallbackTimer) clearInterval(fallbackTimer);
     fallbackTimer = setInterval(function () {
       if (!started || !me || !lastEntry) return;
-      post("signaling/score", { entry: lastEntry });
-    }, 600000); // every 10 minutes
+      // Count currently-connected peers.
+      var connectedCount = 0;
+      peers.forEach(function (p) { if (p.connected) connectedCount++; });
+      var now = Date.now();
+      var gap = connectedCount > 0 ? GIST_SLOW_MS : GIST_FAST_MS;
+      if (now - gistLastPost >= gap) {
+        gistLastPost = now;
+        post("signaling/score", { entry: lastEntry });
+      }
+    }, 5000); // check every 5s; post when the current cadence has elapsed
   }
 
   function stop() {

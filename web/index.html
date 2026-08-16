@@ -418,6 +418,10 @@
         <div class="ptitle"><span>ABOUT / CREDITS</span><span class="pclose" data-close="about">✕</span></div>
         <div class="ab-scroll">
           <div class="ab-block">
+            <div class="ab-kicker">VERSION</div>
+            <p><b>Hermes Pixel Office Enhanced</b> — <b id="about-version">v1.2.1</b></p>
+          </div>
+          <div class="ab-block">
             <div class="ab-kicker">ORIGINAL PLUGIN</div>
             <p>Hermes Pixel Office was originally created by <b>Teknium</b> — a pixel-art virtual office that turns every Hermes agent into an animated character at a desk. This fork, <b>Hermes Pixel Office Enhanced</b>, builds on that clean foundation and takes it further.</p>
             <div class="ab-links"><a class="ab-link" href="https://github.com/teknium1/hermes-pixel-office" target="_blank" rel="noopener"><img src="https://cdn.simpleicons.org/github/181717" alt="" onerror="this.style.display='none'"> teknium1/hermes-pixel-office</a></div>
@@ -456,6 +460,10 @@
 <script src="p2p.js"></script>
 <script>
 "use strict";
+// ── single source of truth for the office version ─────────────────────────
+// Bump this to match the git tag on every release (also shown in the About
+// modal via the #about-version element).
+const OFFICE_VERSION = "v1.2.1";
 // ── host detection ──────────────────────────────────────────────────────
 const IN_VSCODE = typeof acquireVsCodeApi !== "undefined";
 const vsapi = IN_VSCODE ? acquireVsCodeApi() : null;
@@ -1045,7 +1053,11 @@ document.getElementById("lbBtn").onclick=()=>togglePanel("lb");
 document.getElementById("mbBtn").onclick=()=>togglePanel("mb");
 document.getElementById("chatBtn").onclick=()=>togglePanel("chat");
 document.getElementById("tiersBtn").onclick=()=>togglePanel("tiers");
-document.getElementById("aboutBtn").onclick=()=>togglePanel("about");
+document.getElementById("aboutBtn").onclick=()=>{
+  const vEl=document.getElementById("about-version");
+  if(vEl) vEl.textContent=OFFICE_VERSION;
+  togglePanel("about");
+};
 document.getElementById("gh-chip").onclick=()=>{
   // when connected, clicking your name in the top bar opens your profile
   if(myGitHub()){showProfile(myGitHub());}else{togglePanel("gh-connect");}
