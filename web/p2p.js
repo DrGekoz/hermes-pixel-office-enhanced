@@ -564,7 +564,12 @@ window.PixelOfficeP2P = (function () {
       var gap = connectedCount > 0 ? GIST_SLOW_MS : GIST_FAST_MS;
       if (now - gistLastPost >= gap) {
         gistLastPost = now;
-        post("signaling/score", { entry: lastEntry });
+        var e = lastEntry;
+        log("gist post score", "ops=" + (e.ops || 0), "peerCount=" + connectedCount,
+            "cadence=" + (gap / 1000) + "s", "entry={id:" + short(e.id) + ",tools:" + (e.tools || 0) + "}");
+        post("signaling/score", { entry: e }).then(function (res) {
+          log("gist post ok:", (res && res.ok) ? "accepted" : "rejected/ignored");
+        });
       }
     }, 5000); // check every 5s; post when the current cadence has elapsed
   }
