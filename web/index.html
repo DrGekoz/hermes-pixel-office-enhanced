@@ -470,7 +470,7 @@
 // ── single source of truth for the office version ─────────────────────────
 // Bump this to match the git tag on every release (also shown in the About
 // modal via the #about-version element).
-const OFFICE_VERSION = "v1.4.2";
+const OFFICE_VERSION = "v1.4.3";
 // ── host detection ──────────────────────────────────────────────────────
 const IN_VSCODE = typeof acquireVsCodeApi !== "undefined";
 const vsapi = IN_VSCODE ? acquireVsCodeApi() : null;
@@ -1264,12 +1264,6 @@ function mergedModelBoard(){
   const lb=state && state.leaderboard && state.leaderboard[0];
   const localGh=lb && lb.github ? String(lb.github).toLowerCase() : "";
   const rows=new Map();
-  // Pre-seed every ChatGPT model with 0 corrections so the full roster is
-  // always visible — not just the models Jekyll-Hyde has already audited.
-  CHATGPT_MODELS.forEach(function(m){
-    rows.set(m,{model:m, corrections:0, sandbagged:0, genuine:0, uncertain:0,
-      escalated:0, last_corrected:0, streak:0, seeded:true});
-  });
   function fold(mb){
     if(!mb || !mb.installed) return;
     (mb.models||[]).forEach(function(r){
@@ -1294,7 +1288,13 @@ function mergedModelBoard(){
     if(r.github && String(r.github).toLowerCase()===localGh) return; // local user's own copy
     folded.add(mb); fold(mb);
   });
-  const out=[...rows.values()];
+  const out=[...rows.values()].filter(function(r){
+    // Hide rows with no data (0 corrections, 0 verdicts) — placeholder roster
+    // entries or models merely reported-but-never-audited shouldn't clutter the
+    // board.
+    return (r.corrections||0)!==0 || (r.sandbagged||0)!==0 ||
+           (r.genuine||0)!==0 || (r.uncertain||0)!==0;
+  });
   out.sort(function(a,b){
     return (a.corrections-b.corrections)||(a.sandbagged-b.sandbagged)||
            (a.escalated-b.escalated)||String(a.model).localeCompare(String(b.model));
@@ -2010,8 +2010,9 @@ function renderChat(){
   let msgs=(window.PixelOfficeP2P?PixelOfficeP2P.getChat():[]);
   // merge the cached history so chat survives nobody being online
   const byKey=new Map();
-  loadCachedChat().forEach(m=>byKey.set(m.user+"|"+m.text+"|"+(m.ts||""),m));
-  msgs.forEach(m=>byKey.set(m.user+"|"+m.text+"|"+(m.ts||""),m));
+  const chatKey=m=>m.id||(m.user+"|"+m.text+"|"+(m.ts||""));
+  loadCachedChat().forEach(m=>byKey.set(chatKey(m),m));
+  msgs.forEach(m=>byKey.set(chatKey(m),m));
   msgs=[...byKey.values()].sort((a,b)=>(a.ts||0)-(b.ts||0));
   saveCachedChat(msgs);
   if(!msgs.length){el.innerHTML='<div class="pempty">no messages yet — say something to the office</div>';return;}

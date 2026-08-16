@@ -751,6 +751,7 @@ window.PixelOfficeP2P = (function () {
     if (!text || !text.trim()) return;
     var msg = {
       type: "chat",
+      id: "c" + (me ? me.id : "local") + "_" + Date.now() + "_" + ((Math.random() * 1e6) | 0),
       user: me ? me.name : "guest",
       github: me ? me.github : "",
       avatar: me ? me.avatar : "",
@@ -774,7 +775,9 @@ window.PixelOfficeP2P = (function () {
     var seen = {}, merged = [];
     function add(m) {
       if (!m || !m.text) return;
-      var k = String(m.text) + "|" + String(m.user || "") + "|" + (m.ts || 0);
+      // Dedupe by the stable per-send id when present (survives the relay echo,
+      // which re-timestamps ts); otherwise fall back to sender+text+ts.
+      var k = m.id || (String(m.text) + "|" + String(m.user || "") + "|" + (m.ts || 0));
       if (seen[k]) return;
       seen[k] = 1;
       merged.push(m);

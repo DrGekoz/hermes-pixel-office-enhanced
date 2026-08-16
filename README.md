@@ -159,11 +159,22 @@ git clone https://github.com/DrGekoz/hermes-pixel-office-enhanced ~/.hermes/plug
 hermes plugins enable pixel-office
 ```
 
-Start a **new** Hermes session (plugins load at process start — an
-already-running session won't pick it up), make the agent do anything, and
-open:
+The office server only starts once Hermes is running **and** has actually
+processed a prompt — the HTTP server binds `127.0.0.1:8113` **lazily on the
+first agent event**. Until then nothing is listening on that port and the
+page / `curl` will refuse the connection. So, to open the office:
 
-    http://127.0.0.1:8113
+1. Start a **new** Hermes session (plugins load at process start — an
+   already-running session won't pick it up):
+   ```bash
+   hermes
+   ```
+2. **Send the agent a real prompt** (any message will do). This is what
+   actually starts the `8113` server on localhost — the boot happens on the
+   first event, not at process launch.
+3. Open http://127.0.0.1:8113 in your browser.
+
+The server stays up for the lifetime of that Hermes process.
 
 Windows: same commands; the clone path is `%USERPROFILE%\.hermes\plugins\pixel-office`.
 
@@ -223,6 +234,10 @@ hard-refresh in the browser picks them up with no server restart. Backend
 
 ## Troubleshooting
 
+- **"connection refused" on `127.0.0.1:8113` right after starting Hermes** —
+  the office server binds the port **lazily on the first event**. Send the
+  agent a real prompt first; until it handles a message nothing is listening
+  on 8113.
 - **"office unreachable" in the browser/extension** — check
   `hermes logs --level warning`. The plugin logs loudly when it can't bind
   its port, including a probe verdict telling you whether the squatter is

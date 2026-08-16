@@ -157,7 +157,7 @@ export class OfficeDO {
   async addChat(msg) {
     if (!msg || !msg.text) return json({ error: "missing text" }, 400);
     const chat = (await this.state.storage.get("chat")) || [];
-    chat.push({ ...msg, ts: Date.now(), peer: msg.peer || "" });
+    chat.push({ ...msg, ts: msg.ts || Date.now(), peer: msg.peer || "" });
     if (chat.length > 300) chat.splice(0, chat.length - 300);
     await this.state.storage.put("chat", chat);
     return json({ ok: true });
