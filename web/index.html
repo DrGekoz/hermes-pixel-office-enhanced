@@ -467,7 +467,7 @@
 // ── single source of truth for the office version ─────────────────────────
 // Bump this to match the git tag on every release (also shown in the About
 // modal via the #about-version element).
-const OFFICE_VERSION = "v1.3.2";
+const OFFICE_VERSION = "v1.4.0";
 // ── host detection ──────────────────────────────────────────────────────
 const IN_VSCODE = typeof acquireVsCodeApi !== "undefined";
 const vsapi = IN_VSCODE ? acquireVsCodeApi() : null;
@@ -1098,15 +1098,27 @@ function currentBoard(){
   return (state && state.leaderboard) || [];
 }
 function mergeBoards(live, cached){
-  // live (real-time) wins over the last-known cached board; the cache keeps
-  // the board populated when nobody is online. ONLY GitHub usernames appear —
+  // LIVE (real-time) wins over the last-known cached board. Rows are keyed by
+  // GitHub username (case-insensitive), NOT by the row `id` — the same account
+  // legitimately comes back through several sources (the server fold, P2P peer
+  // entries, the gist snapshot and the localStorage cache), each carrying a
+  // different per-browser/per-agent `id`. Keying by `id` was duplicating the
+  // same person. Keying by GitHub collapses every source to ONE authoritative
+  // row per account, so the local user can't dupe their own score when their
+  // row also comes back from server/gist scores. Only GitHub usernames appear —
   // any row without a github handle (cached agents, legacy local rows) is
   // dropped so agents never show up on the leaderboard.
   const m=new Map();
-  (cached||[]).concat(live||[]).forEach(r=>{
-    if(!r || !(r.github)) return;
-    m.set(r.id||r.github||r.name, r);
-  });
+  const feed=(cached||[]).concat(live||[]);
+  for(const r of feed){
+    if(!r || !(r.github)) continue;
+    const key=String(r.github).toLowerCase();
+    const prev=m.get(key);
+    if(!prev){ m.set(key,r); continue; }
+    // Prefer the fresher/higher-scoring row for that user so a stale cache
+    // entry never clobbers a live fold or peer superset.
+    if((r.ops||0)>(prev.ops||0)) m.set(key,r);
+  }
   const rows=[...m.values()];
   rows.sort((a,b)=>(b.ops-a.ops)||(b.tools-a.tools));
   rows.forEach((r,i)=>r.rank=i+1);
@@ -1143,6 +1155,41 @@ function renderLeaderboard(){
 // pixel-office only SUPPORTS the audit engine — if jekyll-hyde isn't
 // installed we show a CTA linking to the plugin so people can contribute.
 const JH_REPO = "https://github.com/jnorthrup/hermes-jekyl-hyde";
+// ── ChatGPT model roster ────────────────────────────────────────────────
+// The Model Leaderboard always lists every known ChatGPT model (shown with 0
+// corrections even before Jekyll-Hyde has audited it) and resolves any raw
+// provider-prefixed id that belongs to a ChatGPT model to its proper display
+// name instead of rendering a bare "unknown" / routing path.
+const CHATGPT_MODELS = [
+  "gpt-5.5","gpt-5.4","gpt-5.3","gpt-5.2","gpt-5.1","gpt-5",
+  "gpt-4o-mini","gpt-4o","gpt-4.1-nano","gpt-4.1-mini","gpt-4.1",
+  "gpt-4-turbo","gpt-4","gpt-3.5-turbo"
+];
+const CHATGPT_SET = new Set(CHATGPT_MODELS);
+// Longest-first so a prefix like "gpt-4o-mini" wins over "gpt-4o".
+const CHATGPT_SORTED = CHATGPT_MODELS.slice().sort(function(a,b){return b.length-a.length;});
+const CHATGPT_ALIAS = { "gpt4o":"gpt-4o", "gpt4o-mini":"gpt-4o-mini", "chatgpt-4o":"gpt-4o", "o3":"gpt-5", "o4-mini":"gpt-4o-mini" };
+// Normalize any raw model id to a canonical ChatGPT model id, or null if it
+// isn't a ChatGPT model. Strips provider prefixes the same way jekyll-hyde does
+// (openrouter/authors/model, custom:model, provider/model → last segment).
+function canonicalModelId(raw){
+  if(!raw) return null;
+  let id=String(raw).trim().toLowerCase();
+  if(!id || id==="unknown"||id==="none"||id==="null") return null;
+  if(id.indexOf("openrouter/")===0) id=id.slice("openrouter/".length);
+  id=id.split(/[/:]/).pop();
+  if(id.indexOf("chatgpt-")===0) id="gpt-"+id.slice("chatgpt-".length);
+  if(!id) return null;
+  if(CHATGPT_ALIAS[id]) return CHATGPT_ALIAS[id];
+  if(CHATGPT_SET.has(id)) return id;
+  for(const m of CHATGPT_SORTED){ if(id.indexOf(m)===0) return m; }
+  return null;
+}
+function modelDisplayName(raw){
+  const canon=canonicalModelId(raw);
+  if(canon) return canon;
+  return String(raw||"").trim() || "unknown";
+}
 // Merge this machine's local modelboard with every peer's modelboard that
 // arrived over the P2P score packets into a single shared Model Leaderboard.
 // A model's corrections are summed across contributors (it's the same model
@@ -1151,21 +1198,28 @@ const JH_REPO = "https://github.com/jnorthrup/hermes-jekyl-hyde";
 function mergedModelBoard(){
   const local=(state && state.modelboard) || {};
   const rows=new Map();
+  // Pre-seed every ChatGPT model with 0 corrections so the full roster is
+  // always visible — not just the models Jekyll-Hyde has already audited.
+  CHATGPT_MODELS.forEach(function(m){
+    rows.set(m,{model:m, corrections:0, sandbagged:0, genuine:0, uncertain:0,
+      escalated:0, last_corrected:0, streak:0, seeded:true});
+  });
   const all=[local].concat(
     currentBoard().map(function(r){return r.modelboard||null}).filter(Boolean)
   );
   all.forEach(function(mb){
     if(!mb || !mb.installed)return;
     (mb.models||[]).forEach(function(r){
-      const cur=rows.get(r.model);
-      if(cur){
-        cur.corrections+=r.corrections; cur.sandbagged+=r.sandbagged;
-        cur.genuine+=r.genuine; cur.uncertain+=r.uncertain; cur.escalated+=r.escalated;
-        if(r.last_corrected>cur.last_corrected)cur.last_corrected=r.last_corrected;
-        cur.streak+=r.streak;
-      }else{
-        rows.set(r.model,Object.assign({},r));
-      }
+      // Fold real data onto the canonical model id so a ChatGPT model's
+      // corrections land on the right roster row (not a bare "unknown").
+      const key=canonicalModelId(r.model) || String(r.model||"unknown");
+      const cur=rows.get(key) || {model:key, corrections:0, sandbagged:0,
+        genuine:0, uncertain:0, escalated:0, last_corrected:0, streak:0};
+      cur.corrections+=r.corrections; cur.sandbagged+=r.sandbagged;
+      cur.genuine+=r.genuine; cur.uncertain+=r.uncertain; cur.escalated+=r.escalated;
+      if(r.last_corrected>cur.last_corrected)cur.last_corrected=r.last_corrected;
+      cur.streak+=r.streak;
+      rows.set(key,cur);
     });
   });
   const out=[...rows.values()];
@@ -1174,7 +1228,11 @@ function mergedModelBoard(){
            (a.escalated-b.escalated)||String(a.model).localeCompare(String(b.model));
   });
   out.forEach(function(r,i){r.rank=i+1;});
-  return {installed: rows.size>0, models:out};
+  // Only claim "installed" if Jekyll-Hyde (local or any peer) is actually
+  // present — otherwise keep the install CTA instead of showing an empty roster.
+  const installed=(local && local.installed) ||
+    currentBoard().some(function(r){return r.modelboard && r.modelboard.installed;});
+  return {installed: installed, models:out};
 }
 // _mbHTML caches the last-rendered board (same flicker-guard as the leaderboard).
 let _mbHTML=null;
@@ -1194,7 +1252,7 @@ function renderModelBoard(){
   }else{
     const rows=models.map(r=>{
       const top=r.rank<=3;
-      const clean=esc(r.model||"unknown");
+      const clean=esc(modelDisplayName(r.model));
       const last=r.last_corrected?' · '+timeAgo(r.last_corrected):'';
       return '<div class="mb-row">'+
         '<span class="mb-rank'+(top?" top":"")+'">'+r.rank+'</span>'+
