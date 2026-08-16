@@ -549,7 +549,13 @@ def _signaling_path() -> Path:
 
 
 def _peer_id() -> str:
-    """Stable id for THIS office identity (GitHub username or 'local')."""
+    """Stable id for THIS office identity (GitHub username or 'local').
+
+    Only used as a FALLBACK peer id. The frontend now generates a per-browser
+    random UUID and sends it as ``peer`` on every signaling call, so two
+    windows/machines on the same GitHub account are distinct peers instead of
+    colliding on one shared username slot.
+    """
     ident = _load_identity() or {}
     return str(ident.get("github") or ident.get("name") or "local")
 
@@ -626,9 +632,54 @@ def _mutate_signaling(fn, retries=4) -> bool:
     return False
 
 
-def signaling_register(online: bool, key: Any = None, kid: str = "") -> Dict[str, Any]:
+def _request_peer(peer: str = "") -> str:
+    """Peer id for a signaling request: the client-supplied per-browser UUID,
+    falling back to the office GitHub identity."""
+    return str(peer or "").strip() or _peer_id()
+
+
+def ice_servers() -> List[Dict[str, Any]]:
+    """ICE server list served to clients (STUN defaults + optional TURN).
+
+    Strict CGNAT blocks STUN-only WebRTC (no host candidates are reachable).
+    A TURN relay fixes that. TURN servers are configured via the plugin config
+    key ``ice_servers`` (a JSON list of {urls/url, username, credential}) or
+    the env var ``PIXEL_OFFICE_ICE_SERVERS``. STUN defaults always included so
+    direct connections still work when they can.
+    """
+    servers: List[Dict[str, Any]] = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+    ]
+    raw = ""
+    try:
+        from hermes_cli.config import cfg_get, load_config
+        cfg = cfg_get(load_config(), "plugins", "entries", "pixel-office", "ice_servers")
+        if cfg:
+            raw = str(cfg)
+    except Exception:
+        pass
+    if not raw:
+        raw = os.environ.get("PIXEL_OFFICE_ICE_SERVERS", "")
+    if not raw:
+        return servers
+    try:
+        extra = json.loads(raw)
+        if isinstance(extra, list):
+            for e in extra:
+                if isinstance(e, dict) and ("urls" in e or "url" in e):
+                    if "url" in e and "urls" not in e:
+                        e = {**e, "urls": e["url"]}
+                    servers.append(e)
+    except Exception:
+        pass
+    return servers
+
+
+def signaling_register(online: bool, key: Any = None, kid: str = "",
+                       peer: str = "") -> Dict[str, Any]:
     """Register/unregister this instance's presence in the shared signaling doc."""
-    me = _peer_id()
+    me = _request_peer(peer)
     ident = _load_identity() or {}
 
     def _reg(doc):
@@ -653,12 +704,12 @@ def signaling_register(online: bool, key: Any = None, kid: str = "") -> Dict[str
             peers.pop(me, None)
 
     _mutate_signaling(_reg)
-    return signaling_state()
+    return signaling_state(peer)
 
 
-def signaling_state() -> Dict[str, Any]:
+def signaling_state(peer: str = "") -> Dict[str, Any]:
     """Return the signaling doc with me flagged (for the frontend)."""
-    me = _peer_id()
+    me = _request_peer(peer)
     doc = _signaling_doc()
     peers = doc.get("peers", {})
     self_entry = peers.pop(me, None) or {}
@@ -676,31 +727,31 @@ def signaling_state() -> Dict[str, Any]:
     }
 
 
-def signaling_send_offer(to: str, sdp: Any) -> bool:
+def signaling_send_offer(to: str, sdp: Any, peer: str = "") -> bool:
     """Write a WebRTC offer from me to peer `to`."""
-    me = _peer_id()
+    me = _request_peer(peer)
 
     def _reg(doc):
         peers = doc.setdefault("peers", {})
-        peer = peers.setdefault(to, {"online": False})
-        peer.setdefault("offers", {})[me] = {"sdp": sdp, "ts": time.time()}
+        peer_node = peers.setdefault(to, {"online": False})
+        peer_node.setdefault("offers", {})[me] = {"sdp": sdp, "ts": time.time()}
     return _mutate_signaling(_reg)
 
 
-def signaling_send_answer(to: str, sdp: Any) -> bool:
+def signaling_send_answer(to: str, sdp: Any, peer: str = "") -> bool:
     """Write a WebRTC answer from me to peer `to`."""
-    me = _peer_id()
+    me = _request_peer(peer)
 
     def _reg(doc):
         peers = doc.setdefault("peers", {})
-        peer = peers.setdefault(to, {"online": False})
-        peer.setdefault("answers", {})[me] = {"sdp": sdp, "ts": time.time()}
+        peer_node = peers.setdefault(to, {"online": False})
+        peer_node.setdefault("answers", {})[me] = {"sdp": sdp, "ts": time.time()}
     return _mutate_signaling(_reg)
 
 
-def signaling_clear_inbox() -> None:
+def signaling_clear_inbox(peer: str = "") -> None:
     """Clear my offer/answer/ice mailboxes (after consuming them)."""
-    me = _peer_id()
+    me = _request_peer(peer)
 
     def _reg(doc):
         p = doc.get("peers", {}).get(me)
@@ -711,50 +762,64 @@ def signaling_clear_inbox() -> None:
     _mutate_signaling(_reg)
 
 
-def signaling_send_ice(to: str, candidate: Any) -> bool:
+def signaling_send_ice(to: str, candidate: Any, peer: str = "") -> bool:
     """Trickle an ICE candidate from me to peer `to` via the shared doc.
 
     Mirrors IdleViber's ICE trickle so peers that gather candidates after
     their SDP still connect reliably behind NAT. Candidates accumulate in a
     per-peer mailbox and are consumed from ``signaling_state``.
     """
-    me = _peer_id()
+    me = _request_peer(peer)
 
     def _reg(doc):
         peers = doc.setdefault("peers", {})
-        peer = peers.setdefault(to, {"online": False})
-        bucket = peer.setdefault("ice", {})
+        peer_node = peers.setdefault(to, {"online": False})
+        bucket = peer_node.setdefault("ice", {})
         bucket.setdefault(me, []).append(candidate)
     return _mutate_signaling(_reg)
 
 
-def signaling_post_score(entry: Dict[str, Any]) -> bool:
-    """Write this instance's latest score into the shared doc as a FALLBACK.
+def signaling_post_score(entry: Dict[str, Any], peer: str = "") -> bool:
+    """Write this instance's latest score entry into the shared doc.
 
-    WebRTC data channels are the primary/"front" transport for realtime
-    scores. This is ONLY used so a peer that can't be reached directly over
-    WebRTC (e.g. strict CGNAT) can still read our score through the gist.
+    This is the DURABLE gist snapshot. It stores the FULL score packet payload
+    (score fields + tier, bio, links, tierIcon, profileTheme, interfaceTheme,
+    agents, modelboard) so that any player — even one we can never reach over
+    WebRTC (strict CGNAT), or one who connects long after we were online —
+    can read our full leaderboard row from the shared gist. Kept whole (not
+    whitelisted) so new packet fields persist without a server change.
     """
-    me = _peer_id()
+    me = _request_peer(peer)
 
     def _reg(doc):
         peers = doc.setdefault("peers", {})
         self_e = peers.setdefault(me, {"online": True})
         self_e["online"] = True
         self_e["last_seen"] = time.time()
+        # Persist the entire entry; default each field so the slot stays useful
+        # even if a client posts a minimal entry.
+        e = entry or {}
+        existing = peers.get(me) or {}
         self_e["score"] = {
-            "id": (entry or {}).get("id") or me,
-            "github": (entry or {}).get("github") or me,
-            "name": (entry or {}).get("name") or me,
-            "avatar": (entry or {}).get("avatar", ""),
-            "url": (entry or {}).get("url", ""),
-            "ops": (entry or {}).get("ops", 0),
-            "tools": (entry or {}).get("tools", 0),
-            "sessions": (entry or {}).get("sessions", 0),
-            "time_s": (entry or {}).get("time_s", 0),
-            "tier": (entry or {}).get("tier"),
-            "counter": (entry or {}).get("counter", 0),
-            "ts": (entry or {}).get("ts", time.time()),
+            "id": e.get("id") or me,
+            "github": e.get("github") or existing.get("github") or me,
+            "name": e.get("name") or existing.get("name") or me,
+            "avatar": e.get("avatar", ""),
+            "url": e.get("url", ""),
+            "ops": e.get("ops", 0),
+            "tools": e.get("tools", 0),
+            "sessions": e.get("sessions", 0),
+            "time_s": e.get("time_s", 0),
+            "tier": e.get("tier"),
+            "tierIcon": e.get("tierIcon", ""),
+            "bio": e.get("bio", ""),
+            "links": e.get("links", {}) or {},
+            "profileTheme": e.get("profileTheme", {}) or {},
+            "interfaceTheme": e.get("interfaceTheme", {}) or {},
+            "agents": e.get("agents", []) or [],
+            "modelboard": e.get("modelboard"),
+            "counter": e.get("counter", 0),
+            "ts": e.get("ts", time.time()),
         }
     return _mutate_signaling(_reg)
 
@@ -1230,6 +1295,77 @@ def _model_leaderboard() -> Dict[str, Any]:
     return {"models": rows, "installed": True}
 
 
+def _merge_gist_scores(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Merge remote peers' durable gist score snapshots into the leaderboard.
+
+    Every office instance posts its FULL score entry to the shared gist every
+    10 minutes (regardless of WebRTC). This folds those snapshots into the
+    server-side ``/state`` leaderboard so that:
+      * a browser loading the office sees other players' rows even when the
+        WebRTC mesh never established (CGNAT), and
+      * late/remote players persist after they go offline.
+
+    Local rows stay authoritative for their own github (this machine's fold is
+    the live truth for the user running this office); remote snapshots are only
+    ADDED for users not already present locally. Reads always work — the gist
+    is public — so this is the durable cross-machine store regardless of the
+    owner-write-only limitation.
+    """
+    try:
+        doc = _signaling_doc()
+        peers = doc.get("peers", {}) or {}
+    except Exception:
+        return rows
+    if not isinstance(peers, dict):
+        return rows
+
+    by_gh = {str(r.get("github") or "").lower(): r for r in rows}
+    added = 0
+    for pid, p in peers.items():
+        if not isinstance(p, dict):
+            continue
+        score = p.get("score")
+        if not isinstance(score, dict) or not score.get("github"):
+            continue
+        gh = str(score.get("github") or "").lower()
+        if gh in by_gh:
+            continue  # local row is authoritative for this user
+        row = {
+            "id": score.get("id") or gh,
+            "name": score.get("name") or score.get("github"),
+            "github": score.get("github"),
+            "avatar": score.get("avatar", ""),
+            "url": score.get("url", ""),
+            "ops": score.get("ops", 0) or 0,
+            "tools": score.get("tools", 0) or 0,
+            "sessions": score.get("sessions", 0) or 0,
+            "time_ms": float(score.get("time_s", 0) or 0) * 1000.0,
+            "time_s": score.get("time_s", 0) or 0,
+            "tier": score.get("tier"),
+            "tierIcon": score.get("tierIcon", ""),
+            "bio": score.get("bio", ""),
+            "links": score.get("links", {}) or {},
+            "profileTheme": score.get("profileTheme", {}) or {},
+            "interfaceTheme": score.get("interfaceTheme", {}) or {},
+            "agents": score.get("agents", []) or [],
+            "modelboard": score.get("modelboard"),
+            "is_dev": gh in ("drgekoz", "teknium1", "jnorthrup"),
+            "source": "gist",
+            "first": float(score.get("ts", 0) or 0),
+            "last": float(score.get("ts", 0) or 0),
+        }
+        by_gh[gh] = row
+        added += 1
+
+    if not added:
+        return rows
+    merged = list(by_gh.values())
+    merged.sort(key=lambda r: (r.get("ops") or 0, r.get("tools") or 0), reverse=True)
+    for rank, r in enumerate(merged, 1):
+        r["rank"] = rank
+    return merged
+
+
 def _build_registry(ledger: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """pid -> identity from signed 'identity' blocks in the ledger."""
     reg: Dict[str, Dict[str, Any]] = {}
@@ -1384,6 +1520,11 @@ def build_state() -> Dict[str, Any]:
     # Model Leaderboard — jekyll-hyde correction tallies (fewest first, so
     # the most-corrected model sits at the bottom).
     modelboard = _model_leaderboard()
+
+    # Durable cross-machine leaderboard: fold every peer's 10-min gist score
+    # snapshot into the server-side board so players appear even when the
+    # WebRTC mesh never established (CGNAT) or after they go offline.
+    rows = _merge_gist_scores(rows)
 
     return {
         "agents": visible,
@@ -1665,8 +1806,16 @@ def _serve() -> None:
                     body = (web_root / "p2p.js").read_bytes()
                     self._send_bytes(body, "text/javascript; charset=utf-8")
                 elif path == "/signaling/state":
-                    self._send_bytes(json.dumps(signaling_state()).encode("utf-8"),
-                                     "application/json")
+                    from urllib.parse import parse_qs, urlparse
+                    _q = parse_qs(urlparse(self.path).query)
+                    _peer = (_q.get("peer") or [""])[0]
+                    self._send_bytes(
+                        json.dumps(signaling_state(_peer)).encode("utf-8"),
+                        "application/json")
+                elif path == "/signaling/ice-config":
+                    self._send_bytes(
+                        json.dumps({"iceServers": ice_servers()}).encode("utf-8"),
+                        "application/json")
                 elif path == "/auth/status":
                     user = github_login()
                     self._send_bytes(json.dumps({
@@ -1748,26 +1897,33 @@ def _serve() -> None:
                         bool(body.get("online", True)),
                         body.get("key"),
                         str(body.get("kid") or ""),
+                        str(body.get("peer") or ""),
                     )
                     self._send_bytes(json.dumps(st).encode("utf-8"), "application/json")
                 elif path == "/signaling/offer":
-                    ok = signaling_send_offer(str(body.get("to") or ""), body.get("sdp"))
+                    ok = signaling_send_offer(str(body.get("to") or ""),
+                                              body.get("sdp"),
+                                              str(body.get("peer") or ""))
                     self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
                                      "application/json")
                 elif path == "/signaling/answer":
-                    ok = signaling_send_answer(str(body.get("to") or ""), body.get("sdp"))
+                    ok = signaling_send_answer(str(body.get("to") or ""),
+                                               body.get("sdp"),
+                                               str(body.get("peer") or ""))
                     self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
                                      "application/json")
                 elif path == "/signaling/clear":
-                    signaling_clear_inbox()
+                    signaling_clear_inbox(str(body.get("peer") or ""))
                     self._send_bytes(b'{"ok":true}', "application/json")
                 elif path == "/signaling/score":
-                    ok = signaling_post_score(body.get("entry") or {})
+                    ok = signaling_post_score(body.get("entry") or {},
+                                              str(body.get("peer") or ""))
                     self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
                                      "application/json")
                 elif path == "/signaling/ice":
                     ok = signaling_send_ice(str(body.get("to") or ""),
-                                            body.get("candidate"))
+                                            body.get("candidate"),
+                                            str(body.get("peer") or ""))
                     self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
                                      "application/json")
                 else:

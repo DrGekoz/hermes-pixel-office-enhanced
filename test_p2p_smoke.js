@@ -31,14 +31,19 @@ function makeServer() {
 }
 function makeFetch(srv, me) {
   return function (path, opts) {
-    const p = String(path).split("?")[0];
+    const full = String(path);
+    const p = full.split("?")[0];
     const body = (opts && opts.body) ? JSON.parse(opts.body) : {};
+    // The client now identifies itself with a per-browser UUID in body.peer
+    // (POST) or the ?peer= query param (GET), exactly like the real server.
+    const qp = new URLSearchParams(full.split("?")[1] || "");
+    const self = body.peer || qp.get("peer") || me;
     let data = {};
-    if (p === "signaling/register") { if (body.online) srv.peers[me] = { online: true, k: body.key, kid: body.kid }; else delete srv.peers[me]; data = srv.state(me); }
-    else if (p === "signaling/state") data = srv.state(me);
-    else if (p === "signaling/offer") { (srv.offers[body.to] = srv.offers[body.to] || {})[me] = { sdp: body.sdp }; data = { ok: true }; }
-    else if (p === "signaling/answer") { (srv.answers[body.to] = srv.answers[body.to] || {})[me] = { sdp: body.sdp }; data = { ok: true }; }
-    else if (p === "signaling/clear") { srv.offers[me] = {}; srv.answers[me] = {}; data = { ok: true }; }
+    if (p === "signaling/register") { if (body.online) srv.peers[self] = { online: true, k: body.key, kid: body.kid }; else delete srv.peers[self]; data = srv.state(self); }
+    else if (p === "signaling/state") data = srv.state(self);
+    else if (p === "signaling/offer") { (srv.offers[body.to] = srv.offers[body.to] || {})[self] = { sdp: body.sdp }; data = { ok: true }; }
+    else if (p === "signaling/answer") { (srv.answers[body.to] = srv.answers[body.to] || {})[self] = { sdp: body.sdp }; data = { ok: true }; }
+    else if (p === "signaling/clear") { srv.offers[self] = {}; srv.answers[self] = {}; data = { ok: true }; }
     else if (p === "signaling/ice") { data = { ok: true }; }
     else data = {};
     return Promise.resolve({ json: () => Promise.resolve(data) });
@@ -68,12 +73,15 @@ function FakeRTC() {
   allPCs.push(pc);
   return pc;
 }
-// Pair the last answerer pc's ondatachannel to the first unpaired offerer channel.
+// Pair the answerer pc's ondatachannel to the first unpaired offerer channel.
 let lastBridge = null;
 function bridgeAnswererToOfferer() {
   const offerer = pendingOfferChannels.shift();
-  const answerer = allPCs[allPCs.length - 1];
-  if (!offerer) return false;
+  // The answerer is the pc that registered an ondatachannel handler (i.e. it
+  // answered an incoming offer). With random-UUID peer ids EITHER side can be
+  // the offerer, so scan for the answerer instead of assuming it's the last.
+  const answerer = allPCs.find(p => typeof p.ondatachannel === "function");
+  if (!offerer || !answerer) return false;
   const bCh = makeDC();
   answerer._dc = bCh;
   answerer.ondatachannel({ channel: bCh });
@@ -88,8 +96,17 @@ function bridgeAnswererToOfferer() {
 // ---------- load the module ----------
 function loadInstance(id, name, srv, logs) {
   const sched = new TimerScheduler();
+  // Per-instance in-memory localStorage so each browser gets its OWN stable
+  // UUID peer id (the whole point of the fix).
+  const store = {};
+  const localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
   const sandbox = {
-    window: {}, fetch: makeFetch(srv, id),
+    window: {}, fetch: makeFetch(srv, id), localStorage,
+    URLSearchParams,
     console: { log: (...a) => logs.push("LOG " + a.join(" ")),
                warn: (...a) => logs.push("WARN " + a.join(" ")),
                debug: (...a) => logs.push("DEBUG " + a.join(" ")) },
@@ -118,16 +135,21 @@ function run() {
 
   A.api.start({ github: "alice", name: "Alice" });
   B.api.start({ github: "bob", name: "Bob" });
-
   const flush = () => new Promise(r => setImmediate(r));
   const settle = (ms = 120) => new Promise(r => setTimeout(r, ms));
 
   return (async () => {
     await settle(); // let ECDSA keygen + presence/key registration complete
-    // Round 1: A (alice < bob) initiates -> offer. B sees offer -> answers.
-    A.sched.fireIntervals();  await flush();   // A writes offer
-    B.sched.fireIntervals();  await flush();   // B answers (creates answerer pc)
-    const bridged = bridgeAnswererToOfferer(); // pair B's answerer channel to A's offerer
+    // Round 1: poll both sides. With random-UUID peer ids the lexicographically
+    // smaller id initiates (glare avoidance); the other side needs one more poll
+    // to see the offer and answer. Do several alternating rounds so either role
+    // assignment converges, then bridge the answerer channel to the offerer.
+    for (let i = 0; i < 4; i++) {
+      A.sched.fireIntervals(); await flush();
+      B.sched.fireIntervals(); await flush();
+      await flush();
+    }
+    const bridged = bridgeAnswererToOfferer(); // pair answerer channel to offerer
     await flush();
     // Round 2: A applies B's answer (channel already opened by the bridge).
     A.sched.fireIntervals();  await flush();
@@ -148,6 +170,26 @@ function run() {
     const gitsB = lbB0.map(r => r.github).sort().join(",");
     const chatA = A.api.getChat().length;
     const chatB = B.api.getChat().length;
+
+    // ---- same-account distinct-peer test (the core fix) ----
+    // Two windows logged in as the SAME GitHub user must get DIFFERENT peer
+    // ids so they can see + handshake each other. Before this fix both were
+    // keyed by the username and could never connect or share scores.
+    const srv2 = makeServer();
+    const C = loadInstance("drgekozA", "Joe", srv2, logs);
+    const D = loadInstance("drgekozB", "Joe", srv2, logs);
+    C.api.start({ github: "DrGekoz", name: "Joe" });
+    D.api.start({ github: "DrGekoz", name: "Joe" });
+    await settle(80);
+    // Each browser registers under its OWN UUID -> two distinct peer slots for
+    // the same GitHub account. This is exactly the pre-fix failure mode (they
+    // used to collide on one shared "DrGekoz" key and never saw each other).
+    const srv2Ids = Object.keys(srv2.peers).filter(id => srv2.peers[id].online);
+    const sameAccountDistinct = srv2Ids.length === 2 &&
+      new Set(srv2Ids).size === 2 &&
+      srv2Ids[0] !== srv2Ids[1];
+    // Clean up second mesh.
+    C.api.stop(); D.api.stop(); await settle(20);
 
     // ---- hardening checks (inject hostile payloads over the bridge) ----
     let hardenedOk = true;
@@ -186,13 +228,15 @@ function run() {
     console.log("B raw rows:", JSON.stringify(lbB.map(r => ({ id: r.id, ops: r.ops }))));
     console.log("A chat:", chatA, "| B chat:", chatB);
     console.log("hardened:", hardenedOk ? "OK" : "FAIL");
+    console.log("same-account distinct peers:", sameAccountDistinct ? "OK" : "FAIL");
 
     console.log("\n=== A logs (P2P) ===");
     logs.filter(l => /P2P/.test(l) && l.startsWith("LOG") || /P2P/.test(l) && l.startsWith("DEBUG")).slice(0, 14).forEach(l => console.log("  " + l));
     console.log("=== B logs (P2P) ===");
     logs.filter(l => /P2P/.test(l) && /WARN/.test(l)).slice(0, 8).forEach(l => console.log("  " + l));
 
-    const pass = bridged && hardenedOk && gitsA === "alice,bob" && gitsB === "alice,bob"
+    const pass = bridged && hardenedOk && sameAccountDistinct
+      && gitsA === "alice,bob" && gitsB === "alice,bob"
       && chatA >= 2 && chatB >= 2
       && /connected to peer/.test(logs.join(" "));
     console.log("\nPASS:", pass ? "YES" : "NO");

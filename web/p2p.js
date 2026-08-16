@@ -39,6 +39,7 @@ window.PixelOfficeP2P = (function () {
   var MAX_PEERS = 12;        // cap concurrent connections
   var STALE_MS = 60000;      // drop peers whose presence is older than 60s
 
+  var P2P_ID_KEY = "pixeloffice_p2p_id";
   var me = null;             // {id, github, name, avatar, url}
   var keypair = null;        // ECDSA P-256 {publicKey, privateKey}
   var kid = "";
@@ -54,7 +55,7 @@ window.PixelOfficeP2P = (function () {
   var started = false;
   var pollTimer = null;
   var rebroadcastTimer = null;
-  var fallbackTimer = null;    // posts our score to the gist when no peer is reachable via WebRTC
+  var fallbackTimer = null;    // posts our full score entry to the gist every 10min
   var backoff = new Map();   // peerId -> {attempts, next}
 
   // ---- tiny logging helpers (IdleViber "📡 P2P:" style) ----------------
@@ -70,16 +71,41 @@ window.PixelOfficeP2P = (function () {
     console.warn.apply(console, a);
   }
 
+  // ---- per-browser stable player id (IdleViber p2pGetOrCreateId port) ----
+  // IdleViber keys each browser (NOT each GitHub account) by a persistent
+  // random UUID scoped to the username. This is the critical difference that
+  // makes real multiplayer work: two windows/machines on the SAME account get
+  // DIFFERENT peer ids, so they can see and handshake each other instead of
+  // colliding on one shared "DrGekoz" slot in the signaling gist.
+  function peerIdFor(username) {
+    var scope = (username || "guest").replace(/[^a-zA-Z0-9]/g, "");
+    var key = P2P_ID_KEY + (scope ? "_" + scope : "");
+    try {
+      if (localStorage.getItem(key)) return localStorage.getItem(key);
+    } catch (_) {}
+    var id = (crypto.randomUUID && crypto.randomUUID()) ||
+      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0;
+        return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    try { localStorage.setItem(key, id); } catch (_) {}
+    return id;
+  }
+
   // ---- small helpers -------------------------------------------------
   function post(path, body) {
+    var b = body || {};
+    if (me && me.id && !b.peer) b.peer = me.id;
     return fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {}),
+      body: JSON.stringify(b),
     }).then(function (r) { return r.json(); }).catch(function () { return {}; });
   }
   function get(path) {
-    return fetch(path).then(function (r) { return r.json(); })
+    var sep = path.indexOf("?") >= 0 ? "&" : "?";
+    var p = (me && me.id) ? path + sep + "peer=" + encodeURIComponent(me.id) : path;
+    return fetch(p).then(function (r) { return r.json(); })
       .catch(function () { return {}; });
   }
 
@@ -137,13 +163,13 @@ window.PixelOfficeP2P = (function () {
   function setMe(identity) {
     if (identity && identity.github) {
       me = {
-        id: identity.github,
+        id: peerIdFor(identity.github),       // per-browser UUID (not github!)
         github: identity.github,
         name: identity.name || identity.github,
         avatar: identity.avatar || "",
         url: identity.url || "https://github.com/" + identity.github,
       };
-      log("identity set:", me.github);
+      log("identity set:", me.github, "peer", short(me.id));
     } else {
       me = null;
     }
@@ -182,18 +208,6 @@ window.PixelOfficeP2P = (function () {
     lastEntry = e;
     entries.set(me.id, e);       // our own entry in the local board
     broadcastMsg({ type: "score", entry: e });
-  }
-
-  // Trimmed copy of our latest score, sized for the gist fallback.
-  function fallbackEntry() {
-    if (!lastEntry) return null;
-    return {
-      id: lastEntry.id, github: lastEntry.github, name: lastEntry.name,
-      avatar: lastEntry.avatar, url: lastEntry.url,
-      ops: lastEntry.ops, tools: lastEntry.tools, sessions: lastEntry.sessions,
-      time_s: lastEntry.time_s, tier: lastEntry.tier,
-      counter: lastEntry.counter, ts: Date.now(),
-    };
   }
 
   // ---- mesh primitives ------------------------------------------------
@@ -474,12 +488,14 @@ window.PixelOfficeP2P = (function () {
 
       if (anySig) post("signaling/clear", {}); // consume handled offers/answers/ice
 
-      // Phase 6: gist score fallback for unreachable peers (strict CGNAT).
+      // Phase 6: read peers' durable score snapshots from the shared gist.
+      // These are written every 10min regardless of WebRTC, so we can always
+      // pull a late/remote player's full entry even if the mesh never opened.
       for (var s = 0; s < ids.length; s++) {
         var fid2 = ids[s];
         if (!fid2 || fid2 === me.id) continue;
         var fpp = peers.get(fid2);
-        if (fpp && fpp.connected) continue;   // already live over WebRTC
+        if (fpp && fpp.connected) continue;   // already live over WebRTC (fresh data)
         if (connecting.has(fid2)) continue;
         var fs = pl[fid2].score;
         if (!fs || !fs.id) continue;
@@ -487,7 +503,7 @@ window.PixelOfficeP2P = (function () {
         var prev2 = entries.get(fs.id);
         if (!prev2 || c2 >= (Number(prev2.counter) || 0)) {
           entries.set(fs.id, fs);
-          log("score recv (gist fallback)", short(fs.id), "ops=" + (fs.ops || 0), "counter=" + c2);
+          log("score recv (gist snapshot)", short(fs.id), "ops=" + (fs.ops || 0), "counter=" + c2);
           scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
         }
       }
@@ -500,6 +516,16 @@ window.PixelOfficeP2P = (function () {
     if (!me) { warn("start: no identity"); return; }
     started = true;
     log("starting, ID", short(me.id));
+    // Load ICE/TURN servers from the office server so a configured TURN relay
+    // can bridge strict-CGNAT peers (STUN-only fails when no host candidate is
+    // reachable). Falls back to STUN-only if the endpoint is unavailable.
+    fetch("signaling/ice-config").then(function (r) { return r.json(); })
+      .then(function (cfg) {
+        if (cfg && Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
+          ICE.iceServers = cfg.iceServers;
+          log("ice config loaded:", ICE.iceServers.length, "server(s)");
+        }
+      }).catch(function () {});
     // Publish presence + our ECDSA public key (for packet verification).
     ensureKeys().then(function () {
       return crypto.subtle.exportKey("jwk", keypair.publicKey);
@@ -514,17 +540,20 @@ window.PixelOfficeP2P = (function () {
         broadcastMsg({ type: "score", entry: lastEntry }, true);
       }
     }, REBROADCAST_MS);
-    // Gist fallback: when we have ZERO peers reachable over WebRTC, publish
-    // our score to the gist so other players can still read it.
+    // Gist persistence (durable snapshot). We ALWAYS publish our latest score
+    // entry to the shared gist on a 10-minute cadence, REGARDLESS of whether
+    // we're connected to peers over WebRTC. P2P data channels are realtime and
+    // fast, but they're unreliable (ordered:false / maxRetransmits:0) and can
+    // be blocked by CGNAT — the gist snapshot is what lets a late/remote player
+    // still see our score. Sending the FULL entry (not the trimmed fallback)
+    // persists everything that rides in a score packet (tier, bio, links,
+    // themes, agents, modelboard). The gist write is owner-only + separately
+    // rate-limited, so 10min/instance is a safe cadence.
     if (fallbackTimer) clearInterval(fallbackTimer);
     fallbackTimer = setInterval(function () {
       if (!started || !me || !lastEntry) return;
-      var connectedCount = 0;
-      peers.forEach(function (p) { if (p.connected) connectedCount++; });
-      if (connectedCount === 0) {
-        post("signaling/score", { entry: fallbackEntry() });
-      }
-    }, 10000);
+      post("signaling/score", { entry: lastEntry });
+    }, 600000); // every 10 minutes
   }
 
   function stop() {
