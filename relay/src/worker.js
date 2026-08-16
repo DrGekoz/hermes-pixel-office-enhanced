@@ -179,10 +179,14 @@ export class OfficeDO {
     return json({ ok: true, presence });
   }
 
-  // Admin: wipe scores + chat + presence. Optional guard via CLEAR_TOKEN secret.
+  // Admin: wipe scores + chat + presence. FAIL CLOSED: a wipe is only allowed
+  // when a valid CLEAR_TOKEN is supplied. Missing secret -> 503, bad/missing
+  // token -> 403, correct token -> clears.
   async clearAll(body) {
     const tok = this.env.CLEAR_TOKEN;
-    if (tok && body.token !== tok) return json({ error: "forbidden" }, 403);
+    if (!tok) return json({ error: "service_unavailable", reason: "CLEAR_TOKEN not configured" }, 503);
+    const supplied = (body && body.token) || "";
+    if (supplied !== tok) return json({ error: "forbidden" }, 403);
     await this.state.storage.put("scores", {});
     await this.state.storage.put("chat", []);
     await this.state.storage.put("presence", {});

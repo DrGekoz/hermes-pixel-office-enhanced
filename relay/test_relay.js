@@ -82,5 +82,35 @@ ok(chat.length === 300, "chat: capped at 300");
 const g = (await call(do_, "POST", "/api/gist", {})).json;
 ok(g.ok === false && g.reason, "gist: returns no-secrets reason without token");
 
+// --- 6. /api/clear FAIL-CLOSED (issue #1: 503 when secret unset, 403 on bad
+//      token, wipe only on correct token; never an unauthenticated wipe) ---
+function seedOne(d, github, ops) {
+  return call(d, "POST", "/api/score", { entry: { id: github, github, name: github, ops, tools: 1, counter: 1 } });
+}
+function boardLen(d) { return (async () => (await call(d, "GET", "/api/board")).json.board.length)(); }
+
+// a) CLEAR_TOKEN unset -> 503, state untouched
+const doNoTok = mkDO();
+await seedOne(doNoTok, "NoTok", 5);
+let r = await call(doNoTok, "POST", "/api/clear", { token: "anything" });
+ok(r.status === 503, "clear: 503 when CLEAR_TOKEN unset");
+ok(await boardLen(doNoTok) === 1, "clear: state NOT wiped when secret unset");
+
+// b) invalid / missing token -> 403, state untouched
+const doTok = mkDO({ CLEAR_TOKEN: "s3cret" });
+await seedOne(doTok, "TokUser", 5);
+r = await call(doTok, "POST", "/api/clear", { token: "wrong" });
+ok(r.status === 403, "clear: 403 on invalid token");
+r = await call(doTok, "POST", "/api/clear", {});
+ok(r.status === 403, "clear: 403 on missing token");
+r = await call(doTok, "GET", "/api/clear");
+ok(r.status === 403, "clear: 403 on GET (no token body)");
+ok(await boardLen(doTok) === 1, "clear: state NOT wiped on bad/missing token");
+
+// c) correct token -> wipes
+r = await call(doTok, "POST", "/api/clear", { token: "s3cret" });
+ok(r.status === 200 && r.json.ok === true, "clear: 200 + ok with correct token");
+ok(await boardLen(doTok) === 0, "clear: state wiped with correct token");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

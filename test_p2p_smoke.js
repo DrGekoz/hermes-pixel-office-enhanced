@@ -8,7 +8,7 @@ const fs = require("fs");
 const vm = require("vm");
 
 const SRC = fs.readFileSync(
-  "C:/Users/josep/AppData/Local/hermes/plugins/pixel-office/web/p2p.js", "utf8");
+  require("path").join(__dirname, "web", "p2p.js"), "utf8");
 
 // ---------- controllable timer (stubs setTimeout/setInterval) ----------
 const schedulers = [];
