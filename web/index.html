@@ -1247,7 +1247,9 @@ function canonicalModelId(raw){
 function modelDisplayName(raw){
   const canon=canonicalModelId(raw);
   if(canon) return canon;
-  return String(raw||"").trim() || "unknown";
+  const s=String(raw||"").trim();
+  if(!s || s==="unknown"||s==="none"||s==="null") return "";
+  return s;
 }
 // Merge this machine's local modelboard with every peer's modelboard that
 // arrived over the P2P score packets into a single shared Model Leaderboard.
@@ -1269,7 +1271,11 @@ function mergedModelBoard(){
     (mb.models||[]).forEach(function(r){
       // Fold real data onto the canonical model id so a ChatGPT model's
       // corrections land on the right roster row (not a bare "unknown").
-      const key=canonicalModelId(r.model) || String(r.model||"unknown");
+      // Rows whose model can't be named are skipped entirely — Models.dev
+      // names every real model, so an "unknown" row is stale by definition.
+      const canon=canonicalModelId(r.model);
+      const key=canon || String(r.model||"").trim();
+      if(!key || key==="unknown"||key==="none"||key==="null") return;
       const cur=rows.get(key) || {model:key, corrections:0, sandbagged:0,
         genuine:0, uncertain:0, escalated:0, last_corrected:0, streak:0};
       cur.corrections+=r.corrections; cur.sandbagged+=r.sandbagged;
@@ -1324,7 +1330,7 @@ function renderModelBoard(){
   }else{
     const rows=models.map(r=>{
       const top=r.rank<=3;
-      const clean=esc(modelDisplayName(r.model));
+      const clean=esc(modelDisplayName(r.model) || String(r.model||"").trim() || "?");
       const last=r.last_corrected?' · '+timeAgo(r.last_corrected):'';
       return '<div class="mb-row">'+
         '<span class="mb-rank'+(top?" top":"")+'">'+r.rank+'</span>'+

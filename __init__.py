@@ -1303,31 +1303,136 @@ _OFFICE_CHATGPT_ALIAS = {
 _MODEL_WRITE_TS = 0.0
 
 
+# ---------------------------------------------------------------------------
+# Models.dev model resolution
+# ----------------------------
+# Models.dev (https://models.dev) is the authoritative catalog of every known
+# model. The Model Leaderboard resolves whichever model an agent actually uses
+# against it (idempotently — a bare ``deepseek-v4-flash``, a routing path
+# ``deepseek/deepseek-v4-flash``, or the canonical name all resolve to
+# "DeepSeek V4 Flash") so the board never shows a bare "unknown". Cached to
+# disk for a day with stale-cache / string-stripping fallback when offline.
+_MODELS_DEV_URL = "https://models.dev/models.json"
+_MODELS_DEV_TTL = 86400.0
+_MODELS_DEV_CACHE: Optional[Dict[str, Any]] = None
+_MODELS_DEV_CACHE_TS = 0.0
+
+
+def _models_dev_catalog_path() -> Path:
+    return _office_dir() / "models_dev.json"
+
+
+def _load_models_dev_catalog() -> Dict[str, Any]:
+    """Load the Models.dev catalog: ``{full_model_id: entry}`` (each entry has a
+    ``name``). Memory-first, then fresh disk cache, then live fetch, then stale
+    cache. Never raises."""
+    global _MODELS_DEV_CACHE, _MODELS_DEV_CACHE_TS
+    now = time.time()
+    if _MODELS_DEV_CACHE is not None and (now - _MODELS_DEV_CACHE_TS) < _MODELS_DEV_TTL:
+        return _MODELS_DEV_CACHE
+    path = _models_dev_catalog_path()
+    data: Optional[Dict[str, Any]] = None
+    try:
+        if path.exists():
+            blob = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(blob, dict) and "catalog" in blob:
+                if (now - float(blob.get("fetched", 0))) < _MODELS_DEV_TTL:
+                    data = blob["catalog"]
+    except Exception:
+        data = None
+    if data is None:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                _MODELS_DEV_URL, headers={"User-Agent": "hermes-pixel-office/1.0"}
+            )
+            parsed = json.loads(urllib.request.urlopen(req, timeout=10).read())
+            if isinstance(parsed, dict):
+                data = parsed
+                try:
+                    path.write_text(
+                        json.dumps({"fetched": now, "catalog": parsed},
+                                   ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+        except Exception:
+            data = None
+    if data is None:
+        try:
+            if path.exists():
+                blob = json.loads(path.read_text(encoding="utf-8"))
+                data = blob.get("catalog", {}) if isinstance(blob, dict) else {}
+        except Exception:
+            data = {}
+    _MODELS_DEV_CACHE = data or {}
+    _MODELS_DEV_CACHE_TS = now
+    return _MODELS_DEV_CACHE or {}
+
+
+def resolve_model_name(raw: Any) -> str:
+    """Resolve a raw model id to its canonical Models.dev display name.
+
+    Idempotent — a bare id, a routing path, or an already-canonical name all
+    resolve to the same Models.dev name. Returns '' only for empty / None /
+    literally unknown inputs so callers can drop them (never a bogus "unknown").
+    """
+    s = str(raw or "").strip()
+    if not s or s.lower() in ("none", "null", "unknown"):
+        return ""
+    cat = _load_models_dev_catalog()
+    low = s.lower()
+    for key, entry in cat.items():
+        if isinstance(entry, dict) and str(entry.get("name", "")).lower() == low:
+            return str(entry["name"])
+    if low in cat:
+        return str(cat[low].get("name") or s)
+    base = s
+    if base.lower().startswith("openrouter/"):
+        base = base[len("openrouter/"):]
+    last = base.split("/")[-1].split(":")[-1].strip()
+    if not last:
+        return ""
+    ll = last.lower()
+    if ll in cat:
+        return str(cat[ll].get("name") or last)
+    cands = [k for k in cat if k.split("/")[-1].lower() == ll]
+    if not cands:
+        cands = [k for k in cat if k.split("/")[-1].lower().startswith(ll)]
+    if len(cands) == 1:
+        return str(cat[cands[0]].get("name") or last)
+    return last
+
+
 def _canonical_model_name(raw: Any) -> str:
     """Normalize a model id to a stable display name (mirror of the frontend's
-    canonicalModelId). Strips provider prefixes and maps ChatGPT ids onto the
-    roster. Returns the stripped id for non-ChatGPT models, or '' if unparseable.
+    canonicalModelId + Models.dev resolution).
+
+    ChatGPT ids map onto the known roster (so those models always appear under
+    their real name). Every other model is resolved against Models.dev so the
+    correct model name shows — never a bare 'unknown'. Returns '' if unparseable.
     """
     if raw is None:
         return ""
-    s = str(raw).strip().lower()
-    if not s or s in ("unknown", "none", "null"):
+    s = str(raw).strip()
+    if not s or s.lower() in ("unknown", "none", "null"):
         return ""
-    if s.startswith("openrouter/"):
-        s = s[len("openrouter/"):]
-    s = s.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
-    if s.startswith("chatgpt-"):
-        s = "gpt-" + s[len("chatgpt-"):]
-    if not s:
+    base = s
+    if base.lower().startswith("openrouter/"):
+        base = base[len("openrouter/"):]
+    seg = base.split("/")[-1].split(":")[-1].strip().lower()
+    if not seg:
         return ""
-    if s in _OFFICE_CHATGPT_ALIAS:
-        return _OFFICE_CHATGPT_ALIAS[s]
-    if s in _OFFICE_CHATGPT_ROSTER:
-        return s
+    if seg.startswith("chatgpt-"):
+        seg = "gpt-" + seg[len("chatgpt-"):]
+    if seg in _OFFICE_CHATGPT_ALIAS:
+        return _OFFICE_CHATGPT_ALIAS[seg]
+    if seg in _OFFICE_CHATGPT_ROSTER:
+        return seg
     for cand in sorted(_OFFICE_CHATGPT_ROSTER, key=len, reverse=True):
-        if s.startswith(cand):
+        if seg.startswith(cand):
             return cand
-    return s
+    # non-ChatGPT: resolve against Models.dev
+    return resolve_model_name(raw) or seg
 
 
 def _agent_models_path() -> Path:
@@ -1409,9 +1514,11 @@ def _model_leaderboard() -> Dict[str, Any]:
     agent_models = _load_agent_models()
     # Most recently used model — used to re-attribute any activation Jekyll-Hyde
     # logged as "unknown" (it could not name the model) to the real active model.
+    # Resolved through Models.dev so the re-attribution lands on the correct name.
     last_active = ""
     if agent_models:
-        last_active = max(agent_models, key=lambda k: agent_models[k].get("last_seen", 0))
+        best = max(agent_models, key=lambda k: agent_models[k].get("last_seen", 0))
+        last_active = _canonical_model_name(best) or ""
 
     def norm(m: Any) -> str:
         c = _canonical_model_name(m)
@@ -1461,9 +1568,12 @@ def _model_leaderboard() -> Dict[str, Any]:
 
     # Ensure every model the office's agents actually use appears (even with 0
     # corrections) so ChatGPT models show under their real name rather than
-    # being absent or labelled "unknown".
+    # being absent or labelled "unknown". Legacy "unknown" entries are dropped
+    # and stale stripped ids are re-resolved to their Models.dev name.
     for name, rec in agent_models.items():
-        key = _canonical_model_name(name) or name
+        key = _canonical_model_name(name)
+        if not key:
+            continue
         agg.setdefault(key, {
             "model": key, "corrections": 0,
             "sandbagged": 0, "genuine": 0, "uncertain": 0, "escalated": 0,
