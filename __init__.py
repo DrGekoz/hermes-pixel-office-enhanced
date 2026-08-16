@@ -82,6 +82,18 @@ _SESSION_GAP_SECONDS = 60
 _lock = threading.Lock()
 _server_started = False
 _port: int = DEFAULT_PORT
+
+# Gist API load guards. GitHub secondary-rate-limits aggressive pollers; this
+# plugin used to hit the gist API on every 4s poll AND every 10s score post
+# (each up to 4 (GET+PATCH) retries), which tripped a 403 and made every write
+# "rejected/ignored" -> no shared presence/score/chat between players. We now
+# serve cached reads for ~20s and coalesce writes to <=1 PATCH per 12s.
+_GIST_READ_CACHE: Dict[str, Any] = {}
+_GIST_READ_CACHE_TS = 0.0
+_GIST_READ_TTL = 20.0          # serve the cached signaling doc for up to 20s between gist GETs
+_GIST_WRITE_TS = 0.0           # timestamp of the last successful gist PATCH
+_GIST_WRITE_MIN_GAP = 12.0     # coalesce gist writes to at most 1 per 12s
+_GIST_WRITE_PENDING: Optional[Dict[str, Any]] = None  # newest doc waiting to flush
 # Approval hooks don't carry session_id (only a gateway session_key), so we
 # attribute them to the most recent session that fired a tool in this
 # process — approvals always happen inside a tool dispatch.
@@ -563,26 +575,41 @@ def _peer_id() -> str:
 def _signaling_doc() -> Dict[str, Any]:
     """Read the shared signaling doc (peers + SDP mailboxes) from the gist.
 
-    Falls back to a local cache when the gist is unreachable so the office
-    still shows cached peer state offline.
+    Serves a short in-memory cache for up to _GIST_READ_TTL between gist GETs
+    so the 4s client poll can't hammer the GitHub API. Falls back to a local
+    cache when the gist is unreachable so the office still shows cached peer
+    state offline.
     """
     gid = _gist_id()
+    now = time.time()
+    global _GIST_READ_CACHE, _GIST_READ_CACHE_TS
     if gid:
-        data = _gh_get(f"https://api.github.com/gists/{gid}")
-        if data:
-            entry = (data.get("files") or {}).get("signaling.json") or {}
-            content = entry.get("content") or "{}"
-            try:
-                doc = json.loads(content)
-                # refresh local cache
+        with _lock:
+            fresh = now - _GIST_READ_CACHE_TS < _GIST_READ_TTL and bool(_GIST_READ_CACHE)
+        if not fresh:
+            data = _gh_get(f"https://api.github.com/gists/{gid}")
+            if data:
+                entry = (data.get("files") or {}).get("signaling.json") or {}
+                content = entry.get("content") or "{}"
                 try:
-                    _signaling_path().write_text(
-                        json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                    doc = json.loads(content)
+                    if isinstance(doc, dict):
+                        # refresh local cache
+                        try:
+                            _signaling_path().write_text(
+                                json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                        except Exception:
+                            pass
+                        with _lock:
+                            _GIST_READ_CACHE = doc
+                            _GIST_READ_CACHE_TS = now
+                        return doc
                 except Exception:
                     pass
-                return doc if isinstance(doc, dict) else {}
-            except Exception:
-                pass
+        # gist GET failed or the cache is still fresh — serve the cache if held
+        with _lock:
+            if _GIST_READ_CACHE:
+                return _GIST_READ_CACHE
     try:
         if _signaling_path().exists():
             return json.loads(_signaling_path().read_text(encoding="utf-8"))
@@ -595,22 +622,37 @@ def _signaling_write(doc: Dict[str, Any]) -> bool:
     gid = _ensure_gist()
     if not gid:
         return False
+    global _GIST_WRITE_TS, _GIST_WRITE_PENDING
+    now = time.time()
+    with _lock:
+        # Coalesce: keep the newest doc, but only PATCH the gist at most once
+        # per _GIST_WRITE_MIN_GAP. The bursty 4s/10s cadence previously PATCHed
+        # dozens of times a minute and tripped GitHub's secondary rate limit,
+        # making every write "rejected/ignored". The stashed newest doc flushes
+        # on the next allowed write (<= 12s later), so nothing is lost.
+        _GIST_WRITE_PENDING = doc
+        if now - _GIST_WRITE_TS < _GIST_WRITE_MIN_GAP:
+            return True
+        to_write = _GIST_WRITE_PENDING
+        _GIST_WRITE_PENDING = None
     body = _gh_json(
         f"https://api.github.com/gists/{gid}",
         {"files": {"signaling.json": {
-            "content": json.dumps(doc, ensure_ascii=False)}}},
+            "content": json.dumps(to_write, ensure_ascii=False)}}},
     )
     ok = bool(body and "files" in body)
     if ok:
+        with _lock:
+            _GIST_WRITE_TS = now
         try:
             _signaling_path().write_text(
-                json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                json.dumps(to_write, ensure_ascii=False), encoding="utf-8")
         except Exception:
             pass
     return ok
 
 
-def _mutate_signaling(fn, retries=4) -> bool:
+def _mutate_signaling(fn, retries=2) -> bool:
     """Read the signaling doc, apply fn(doc) in place, write it back.
 
     GitHub gists offer no compare-and-swap, so when two machines PATCH the
@@ -674,6 +716,32 @@ def ice_servers() -> List[Dict[str, Any]]:
     except Exception:
         pass
     return servers
+
+
+# Well-known shared Cloudflare relay — the everyone-write multiplayer backbone.
+# Every office instance points at the SAME relay by default (like the
+# well-known gist), so any player who installs the plugin joins the shared
+# leaderboard + chat with ZERO config. Owned/written by DrGekoz; free tier.
+_DEFAULT_RELAY_URL = "https://pixel-office-relay.ads-doctor-melbourne.workers.dev"
+
+
+def relay_url() -> str:
+    """Cloudflare relay URL — the everyone-write multiplayer backbone.
+
+    Resolution: plugin config key ``relay_url`` -> env ``PIXEL_OFFICE_RELAY``
+    -> the built-in shared default. Empty only if the default is disabled.
+    """
+    try:
+        from hermes_cli.config import cfg_get, load_config
+        u = cfg_get(load_config(), "plugins", "entries", "pixel-office", "relay_url")
+        if u:
+            return str(u).strip()
+    except Exception:
+        pass
+    u = os.environ.get("PIXEL_OFFICE_RELAY", "").strip()
+    if u:
+        return u
+    return _DEFAULT_RELAY_URL
 
 
 def signaling_register(online: bool, key: Any = None, kid: str = "",
@@ -1815,6 +1883,10 @@ def _serve() -> None:
                 elif path == "/signaling/ice-config":
                     self._send_bytes(
                         json.dumps({"iceServers": ice_servers()}).encode("utf-8"),
+                        "application/json")
+                elif path == "/office-config":
+                    self._send_bytes(
+                        json.dumps({"relay_url": relay_url()}).encode("utf-8"),
                         "application/json")
                 elif path == "/auth/status":
                     user = github_login()

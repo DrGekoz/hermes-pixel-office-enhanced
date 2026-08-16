@@ -58,6 +58,21 @@ window.PixelOfficeP2P = (function () {
   var fallbackTimer = null;    // posts our full score entry to the gist every 10min
   var backoff = new Map();   // peerId -> {attempts, next}
 
+  // ---- Cloudflare relay (everyone-write backbone) ----------------------
+  // The permanent free store. Works under ANY NAT/CGNAT over plain HTTPS.
+  // When configured, scores + chat + profile ride through it so multiplayer
+  // works even when the raw WebRTC media path can't open. It keys the board
+  // by GitHub username, so duplicates for the same account can't exist.
+  var relayUrl = "";
+  var relayEntries = new Map(); // github(lower) -> entry (authoritative board)
+  var relayChat = [];           // server chat history (authoritative)
+  var relayTimers = [];
+  var RELAY_SCORE_MS = 10000;   // how often we push our score to the relay
+  var RELAY_POLL_MS = 5000;     // how often we pull board + chat
+  var ENTRY_TTL_MS = 10 * 60 * 1000; // drop stale/ghost entries older than this
+  // Shared well-known relay (same for every player — zero-config install).
+  var DEFAULT_RELAY = "https://pixel-office-relay.ads-doctor-melbourne.workers.dev";
+
   // ---- tiny logging helpers (IdleViber "📡 P2P:" style) ----------------
   function short(id) { return String(id || "").substr(0, 8); }
   function log() {
@@ -107,6 +122,80 @@ window.PixelOfficeP2P = (function () {
     var p = (me && me.id) ? path + sep + "peer=" + encodeURIComponent(me.id) : path;
     return fetch(p).then(function (r) { return r.json(); })
       .catch(function () { return {}; });
+  }
+
+  // ---- Cloudflare relay client -----------------------------------------
+  function relayPost(path, body) {
+    if (!relayUrl) return Promise.resolve(null);
+    return fetch(relayUrl + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    }).then(function (r) { return r.json(); }).catch(function () { return null; });
+  }
+  function relayGet(path) {
+    if (!relayUrl) return Promise.resolve(null);
+    return fetch(relayUrl + path).then(function (r) { return r.json(); })
+      .catch(function () { return null; });
+  }
+  // Push our latest score to the relay (everyone-write; deduped server-side by
+  // GitHub username). This is what makes the board work without WebRTC.
+  function postScoreRelay() {
+    if (!lastEntry || !me) return;
+    relayPost("/api/score", { entry: { ...lastEntry, peer: me.id } });
+  }
+  // Pull the authoritative board + fold it into the local board.
+  function pollBoardRelay() {
+    relayGet("/api/board").then(function (res) {
+      if (!res || !Array.isArray(res.board)) return;
+      res.board.forEach(function (row) {
+        if (!row || !row.github) return;
+        var g = String(row.github).toLowerCase();
+        var prev = relayEntries.get(g);
+        if (!prev || (Number(row.counter) || 0) >= (Number(prev.counter) || 0) ||
+            (Number(row.ops) || 0) > (Number(prev.ops) || 0)) {
+          relayEntries.set(g, row);
+        }
+      });
+      scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
+    });
+  }
+  // Pull chat history and merge into the local chat buffer.
+  function pollChatRelay() {
+    relayGet("/api/chat/list").then(function (res) {
+      if (!res || !Array.isArray(res.chat)) return;
+      var before = relayChat.length;
+      relayChat = res.chat.filter(function (m) { return m && m.text; });
+      if (relayChat.length !== before) {
+        chatHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
+      }
+    });
+  }
+  // Host-appointed durable gist backup (one call / 10 min, server-side alarm).
+  // Harmless no-op unless GITHUB_TOKEN + GITHUB_GIST_ID secrets are set.
+  function triggerGistBackup() {
+    if (!relayUrl) return;
+    relayPost("/api/gist", {});
+  }
+  function setRelay(url) {
+    if (!url) return;
+    relayUrl = String(url).replace(/\/+$/, "");
+    log("relay configured:", relayUrl);
+  }
+  function startRelayTimers() {
+    if (!relayUrl) return;
+    relayTimers.push(setInterval(postScoreRelay, RELAY_SCORE_MS));
+    relayTimers.push(setInterval(pollBoardRelay, RELAY_POLL_MS));
+    relayTimers.push(setInterval(pollChatRelay, RELAY_POLL_MS));
+    // Fire immediately once so the board + chat populate without waiting.
+    setTimeout(postScoreRelay, 500);
+    setTimeout(pollBoardRelay, 500);
+    setTimeout(pollChatRelay, 500);
+    log("relay timers started");
+  }
+  function stopRelayTimers() {
+    relayTimers.forEach(function (t) { clearInterval(t); });
+    relayTimers = [];
   }
 
   // ---- ECDSA P-256 packet signing (IdleViber port) -------------------
@@ -208,6 +297,7 @@ window.PixelOfficeP2P = (function () {
     lastEntry = e;
     entries.set(me.id, e);       // our own entry in the local board
     broadcastMsg({ type: "score", entry: e });
+    postScoreRelay();            // push to the everyone-write relay too
   }
 
   // ---- mesh primitives ------------------------------------------------
@@ -511,11 +601,29 @@ window.PixelOfficeP2P = (function () {
   }
 
   // ---- public API -----------------------------------------------------
-  function start(identity) {
+  function start(identity, opts) {
     setMe(identity);
     if (!me) { warn("start: no identity"); return; }
     started = true;
     log("starting, ID", short(me.id));
+    // Configure the everyone-write relay (Cloudflare). Priority: explicit
+    // opts.relay > window.OFFICE_RELAY (set by the office page from
+    // /office-config) > a live fetch of office-config. Boots the relay timers
+    // so the board + chat work even if the WebRTC mesh never opens.
+    var wantRelay = (opts && opts.relay) ||
+      (typeof window !== "undefined" && window.OFFICE_RELAY) || "";
+    if (wantRelay) { setRelay(wantRelay); startRelayTimers(); }
+    else {
+      // No explicit relay: ask the office server, fall back to the shared
+      // well-known relay so the board + chat work even without the endpoint.
+      fetch("office-config").then(function (r) { return r.json(); })
+        .then(function (cfg) {
+          var url = (cfg && cfg.relay_url) || DEFAULT_RELAY;
+          if (url && !relayUrl) { setRelay(url); startRelayTimers(); }
+        }).catch(function () {
+          if (DEFAULT_RELAY && !relayUrl) { setRelay(DEFAULT_RELAY); startRelayTimers(); }
+        });
+    }
     // Load ICE/TURN servers from the office server so a configured TURN relay
     // can bridge strict-CGNAT peers (STUN-only fails when no host candidate is
     // reachable). Falls back to STUN-only if the endpoint is unavailable.
@@ -551,7 +659,7 @@ window.PixelOfficeP2P = (function () {
     //     quota.
     // Sends the FULL entry (score + tier, bio, links, themes, agents,
     // modelboard), persisting everything that rides in a score packet.
-    var GIST_FAST_MS = 10000;   // 10s when no peer connected
+    var GIST_FAST_MS = 60000;   // 60s when no peer connected (was 10s — too chatty, tripped GitHub's secondary rate limit)
     var GIST_SLOW_MS = 600000;  // 10min when connected
     var gistLastPost = 0;
     if (fallbackTimer) clearInterval(fallbackTimer);
@@ -579,6 +687,7 @@ window.PixelOfficeP2P = (function () {
     if (pollTimer) clearInterval(pollTimer);
     if (rebroadcastTimer) clearInterval(rebroadcastTimer);
     if (fallbackTimer) clearInterval(fallbackTimer);
+    stopRelayTimers();
     peers.forEach(function (_p, id) { teardown(id); });
     backoff.clear();
     pending.clear();
@@ -586,7 +695,10 @@ window.PixelOfficeP2P = (function () {
     log("stopped");
   }
 
-  // Merge our live local row + all peer entries into a ranked board.
+  // Merge our live local row + all peer entries + the authoritative relay
+  // board into ONE ranked board, DEDUPED BY GITHUB USERNAME (so a player with
+  // many browsers/machines on the same account shows as exactly ONE row) and
+  // with stale ghost entries pruned (so disconnected sessions don't linger).
   function getLeaderboard(localRow) {
     if (localRow && started && me) {
       if (lastEntry) {
@@ -598,12 +710,29 @@ window.PixelOfficeP2P = (function () {
         entries.set(me.id, lastEntry);
       }
     }
-    var rows = [];
-    entries.forEach(function (e) {
+    var now = Date.now();
+    var best = {}; // github(lower) -> {entry, ops, counter}
+    function consider(e) {
+      if (!e) return;
       var g = e.github || e.user || "";
-      if (!g) return;                    // only GitHub usernames belong
+      if (!g) return; // only GitHub usernames belong
+      // prune stale/ghost rows (fresh relay snapshots + live peers survive)
+      if (e.ts && (now - Number(e.ts)) > ENTRY_TTL_MS) return;
+      var key = String(g).toLowerCase();
+      var ops = Number(e.ops) || 0;
+      var ctr = Number(e.counter) || 0;
+      var cur = best[key];
+      if (!cur || ops > cur.ops || (ops === cur.ops && ctr >= cur.ctr)) {
+        best[key] = { entry: e, ops: ops, ctr: ctr };
+      }
+    }
+    entries.forEach(consider);      // live WebRTC mesh peers
+    relayEntries.forEach(consider); // authoritative relay board (already deduped)
+    var rows = [];
+    Object.keys(best).forEach(function (key) {
+      var e = best[key].entry;
       rows.push({
-        id: e.id, name: e.name || e.user, github: g,
+        id: e.id, name: e.name || e.user, github: e.github || e.user,
         avatar: e.avatar || "", url: e.url || "",
         ops: e.ops || 0, tools: e.tools || 0, sessions: e.sessions || 0,
         time_s: e.time_s || 0, tier: e.tier || null,
@@ -635,12 +764,26 @@ window.PixelOfficeP2P = (function () {
     peerChat.push(msg);
     if (peerChat.length > 200) peerChat = peerChat.slice(-200);
     broadcastMsg(msg);
+    relayPost("/api/chat", { ...msg, peer: me ? me.id : "" }); // durable copy
     log("chat sent:", msg.text.slice(0, 60));
     chatHandlers.forEach(function (cb) { try { cb(msg); } catch (_) {} });
     return msg;
   }
 
-  function getChat() { return peerChat.slice(); }
+  function getChat() {
+    var seen = {}, merged = [];
+    function add(m) {
+      if (!m || !m.text) return;
+      var k = String(m.text) + "|" + String(m.user || "") + "|" + (m.ts || 0);
+      if (seen[k]) return;
+      seen[k] = 1;
+      merged.push(m);
+    }
+    relayChat.forEach(add); // server (authoritative history) first
+    peerChat.forEach(add);  // then live WebRTC mesh messages
+    merged.sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
+    return merged;
+  }
   function onScore(cb) { scoreHandlers.push(cb); }
   function onChat(cb) { chatHandlers.push(cb); }
   function isStarted() { return started; }

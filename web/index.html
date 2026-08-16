@@ -1960,6 +1960,11 @@ document.getElementById("gh-login").onclick=()=>{
 
 // ── P2P mesh wiring ─────────────────────────────────────────────────────
 let p2pStarted=false, lastIdGit="";
+// Fetch the Cloudflare relay URL (set via config or PIXEL_OFFICE_RELAY env)
+// so multiplayer works even when the WebRTC mesh can't open under CGNAT.
+fetch("office-config").then(function(r){return r.json();}).then(function(cfg){
+  if(cfg && cfg.relay_url) window.OFFICE_RELAY=cfg.relay_url;
+}).catch(function(){});
 if(window.PixelOfficeP2P){
   PixelOfficeP2P.onChat(m=>{
     if(m && m.user && !(m.github && state && state.identity &&
@@ -1976,7 +1981,7 @@ function syncP2P(){
   const id=(state&&state.identity)||null;
   const git=id&&id.github?id.github:"";
   if(git && !p2pStarted){
-    PixelOfficeP2P.start(id);
+    PixelOfficeP2P.start(id, { relay: window.OFFICE_RELAY || "" });
     p2pStarted=true;
   }else if(!git && p2pStarted){
     PixelOfficeP2P.stop();
