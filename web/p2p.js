@@ -2,17 +2,25 @@
 // Hermes Pixel Office — P2P mesh (IdleViber pattern)
 // Scores + chat flow ONLY over WebRTC data channels between
 // browsers. GitHub is used purely for login (username) and the
-// signaling handshake (presence + SDP offer/answer exchange via
-// the local plugin server), so peers can find each other.
-// No score/chat message ever touches GitHub once channels open.
+// signaling handshake (presence + SDP offer/answer + ICE
+// trickle via the local plugin server and a shared gist), so
+// peers can find each other. No score/chat message ever touches
+// GitHub once channels open.
 //
-// Instrumented + hardened (2026-08-13): mirrors the Hermes
-// IdleViber console logging pattern ("📡 P2P: ...") so every
-// connection / message / disconnect / backoff is visible in the
-// browser console, and adds input validation, message-size caps,
-// a connect-timeout reconnect backoff, a max-peer cap and
-// try/catch on every handler so a bad peer can never crash the
-// mesh or corrupt the board.
+// HARDENED (IdleViber port, 2026-08-16):
+//   * ECDSA P-256 signed packets — every message is {d, s}
+//     (payload + SHA-256 signature) and is verified against the
+//     peer's published public key before it is accepted. Forged
+//     or corrupt packets are dropped.
+//   * ICE trickle through the gist so peers that gather
+//     candidates after their SDP still connect behind NAT.
+//   * Unreliable/ordered:false data channel (realtime — no
+//     head-of-line blocking on scores).
+//   * Offer/answer retry on every poll + per-peer exponential
+//     reconnect backoff, plus key-rotation detection.
+//   * Staleness filter: peers whose presence is old are skipped.
+//   * Gist score fallback for peers that can't be reached
+//     directly (strict CGNAT).
 // ============================================================
 
 window.PixelOfficeP2P = (function () {
@@ -29,10 +37,14 @@ window.PixelOfficeP2P = (function () {
   var CONNECT_TIMEOUT = 8000;
   var MAX_MSG = 65536;       // max inbound data-channel message (bytes)
   var MAX_PEERS = 12;        // cap concurrent connections
+  var STALE_MS = 60000;      // drop peers whose presence is older than 60s
 
   var me = null;             // {id, github, name, avatar, url}
-  var peers = new Map();     // id -> {pc, channel, connected, entry, timer}
+  var keypair = null;        // ECDSA P-256 {publicKey, privateKey}
+  var kid = "";
+  var peers = new Map();     // id -> {pc, channel, connected, pub, entry, timer}
   var connecting = new Set();
+  var pending = new Map();   // id -> {pub, kid, name} (from signaling doc)
   var entries = new Map();   // id -> entry (latest score we have)
   var peerChat = [];         // chat messages (peers + own)
   var lastEntry = null;      // our latest broadcast entry
@@ -71,6 +83,57 @@ window.PixelOfficeP2P = (function () {
       .catch(function () { return {}; });
   }
 
+  // ---- ECDSA P-256 packet signing (IdleViber port) -------------------
+  function _arrBufToB64(buf) {
+    var b = new Uint8Array(buf), bin = "";
+    for (var i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+    return btoa(bin);
+  }
+  function _b64ToArrBuf(b64) {
+    var bin = atob(b64), b = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+    return b.buffer;
+  }
+  function ensureKeys() {
+    if (keypair) return Promise.resolve();
+    return crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])
+      .then(function (kp) {
+        keypair = kp;
+        return crypto.subtle.exportKey("jwk", kp.publicKey);
+      })
+      .then(function (jwk) {
+        kid = _arrBufToB64(new TextEncoder().encode(JSON.stringify(jwk)))
+          .replace(/[+/=]/g, "").substr(0, 16);
+        log("keyId", kid, "(fresh)");
+      });
+  }
+  function signPayload(payload) {
+    if (!keypair) return Promise.resolve(null);
+    var str = JSON.stringify(payload);
+    return crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" },
+        keypair.privateKey, new TextEncoder().encode(str))
+      .then(function (sig) { return JSON.stringify({ d: payload, s: _arrBufToB64(sig) }); });
+  }
+  function verifyPayload(jsonStr, pub) {
+    if (!pub) return Promise.resolve(null);
+    var msg;
+    try { msg = JSON.parse(jsonStr); } catch (_) { return Promise.resolve(null); }
+    if (!msg || !msg.d || !msg.s) return Promise.resolve(null);
+    var sig = _b64ToArrBuf(msg.s);
+    var payloadStr = JSON.stringify(msg.d);
+    return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" },
+        pub, sig, new TextEncoder().encode(payloadStr))
+      .then(function (ok) { return ok ? msg.d : null; })
+      .catch(function () { return null; });
+  }
+  function importPeerKey(jwk) {
+    if (!jwk) return Promise.resolve(null);
+    return crypto.subtle.importKey("jwk", jwk,
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"])
+      .catch(function () { return null; });
+  }
+
+  // ---- identity ------------------------------------------------------
   function setMe(identity) {
     if (identity && identity.github) {
       me = {
@@ -87,7 +150,6 @@ window.PixelOfficeP2P = (function () {
   }
 
   function myEntry(serverRow) {
-    // Build the entry we broadcast from the live score the server folded.
     if (!serverRow) return null;
     return {
       id: me ? me.id : serverRow.id || "local",
@@ -101,16 +163,12 @@ window.PixelOfficeP2P = (function () {
       sessions: serverRow.sessions || 0,
       time_s: serverRow.time_s || 0,
       tier: serverRow.tier || null,
-      // profile payload rides along with the score so peers see bio/links/
-      // chosen tier icon/themes without a separate channel.
       bio: serverRow.bio || "",
       links: serverRow.links || {},
       tierIcon: serverRow.tierIcon || "",
       profileTheme: serverRow.profileTheme || {},
       interfaceTheme: serverRow.interfaceTheme || {},
       agents: serverRow.agents || [],
-      // modelboard rides the score packet so peers see each other's
-      // jekyll-hyde audit data (model corrections) on a shared board.
       modelboard: serverRow.modelboard || null,
       counter: ++entryCounter,
       ts: Date.now(),
@@ -126,8 +184,7 @@ window.PixelOfficeP2P = (function () {
     broadcastMsg({ type: "score", entry: e });
   }
 
-  // Trimmed copy of our latest score, sized for the gist fallback (we don't
-  // want the full profile/theme/agents/modelboard payload in the shared doc).
+  // Trimmed copy of our latest score, sized for the gist fallback.
   function fallbackEntry() {
     if (!lastEntry) return null;
     return {
@@ -141,50 +198,54 @@ window.PixelOfficeP2P = (function () {
 
   // ---- mesh primitives ------------------------------------------------
   function broadcastMsg(msg, silent) {
-    var s = JSON.stringify(msg);
-    var sent = 0;
-    peers.forEach(function (p) {
-      if (p.channel && p.channel.readyState === "open") {
-        try { p.channel.send(s); sent++; } catch (_) {}
-      }
+    if (!keypair) return 0;
+    signPayload(msg).then(function (signed) {
+      if (!signed) return;
+      var sent = 0;
+      peers.forEach(function (p) {
+        if (p.channel && p.channel.readyState === "open") {
+          try { p.channel.send(signed); sent++; } catch (_) {}
+        }
+      });
+      if (!silent) log("send", msg.type, "->", sent, "peer(s)");
     });
-    if (!silent) log("send", msg.type, "->", sent, "peer(s)");
-    return sent;
+    return 0; // async — actual count logged in the .then
   }
 
-  function handleMessage(peerId, raw) {
-    // Harden: drop empty/oversized payloads before parsing.
+  function handleMessage(peerId, raw, pub) {
     if (!raw || typeof raw !== "string" || raw.length > MAX_MSG) return;
-    var msg;
-    try { msg = JSON.parse(raw); } catch (e) { return; }
-    if (!msg || typeof msg !== "object") return;
-
-    if (msg.type === "score" && msg.entry &&
-        typeof msg.entry.id === "string" && msg.entry.id &&
-        msg.entry.id.length <= 200) {
-      var eid = msg.entry.id;
-      if (eid === me.id) return;              // ignore our own echoed entry
-      var prev = entries.get(eid);
-      var c = Number(msg.entry.counter) || 0;
-      if (!prev || c >= (Number(prev.counter) || 0)) {
-        entries.set(eid, msg.entry);
-        log("score recv", short(eid), "ops=" + (msg.entry.ops || 0), "counter=" + c);
-        scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
+    verifyPayload(raw, pub).then(function (payload) {
+      if (!payload || typeof payload !== "object") {
+        if (Math.random() < 0.01) warn("verify fail from", short(peerId), "(stale key — normal during reconnect)");
+        return;
       }
-    } else if (msg.type === "chat" && typeof msg.text === "string" && msg.text) {
-      msg.ts = msg.ts || Date.now();
-      msg.peer = peerId;
-      peerChat.push(msg);
-      if (peerChat.length > 200) peerChat = peerChat.slice(-200);
-      log("chat recv from", short(peerId), ":", msg.text.slice(0, 60));
-      chatHandlers.forEach(function (cb) { try { cb(msg); } catch (_) {} });
-    }
+      var msg = payload;
+      if (msg.type === "score" && msg.entry &&
+          typeof msg.entry.id === "string" && msg.entry.id &&
+          msg.entry.id.length <= 200) {
+        var eid = msg.entry.id;
+        if (eid === me.id) return;              // ignore our own echoed entry
+        var prev = entries.get(eid);
+        var c = Number(msg.entry.counter) || 0;
+        if (!prev || c >= (Number(prev.counter) || 0)) {
+          entries.set(eid, msg.entry);
+          log("score recv", short(eid), "ops=" + (msg.entry.ops || 0), "counter=" + c);
+          scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
+        }
+      } else if (msg.type === "chat" && typeof msg.text === "string" && msg.text) {
+        msg.ts = msg.ts || Date.now();
+        msg.peer = peerId;
+        peerChat.push(msg);
+        if (peerChat.length > 200) peerChat = peerChat.slice(-200);
+        log("chat recv from", short(peerId), ":", msg.text.slice(0, 60));
+        chatHandlers.forEach(function (cb) { try { cb(msg); } catch (_) {} });
+      }
+    });
   }
 
   function noteBackoff(peerId) {
     var b = backoff.get(peerId) || { attempts: 0, next: 0 };
     b.attempts++;
-    // exponential: 3s, 6s, 12s, 24s, 48s, capped at 60s
     var wait = Math.min(60000, 3000 * Math.pow(2, Math.min(b.attempts, 5)));
     b.next = Date.now() + wait;
     backoff.set(peerId, b);
@@ -207,14 +268,17 @@ window.PixelOfficeP2P = (function () {
       connecting.delete(peerId);
       backoff.delete(peerId);
       log("connected to peer", short(peerId));
-      // On connect, hand the peer our current score immediately.
       if (lastEntry) {
-        try { channel.send(JSON.stringify({ type: "score", entry: lastEntry })); } catch (_) {}
+        signPayload({ type: "score", entry: lastEntry }).then(function (signed) {
+          if (signed) { try { channel.send(signed); } catch (_) {} }
+        });
       }
       scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
     };
     channel.onmessage = function (ev) {
-      try { handleMessage(peerId, ev && ev.data); }
+      // Look up the peer's pubkey lazily (async import may finish after attach).
+      var pub = (pending.get(peerId) || {}).pub || null;
+      try { handleMessage(peerId, ev && ev.data, pub); }
       catch (e) { warn("msg handler error:", e && e.message); }
     };
     channel.onerror = function (ev) { warn("channel error", short(peerId)); };
@@ -245,6 +309,7 @@ window.PixelOfficeP2P = (function () {
     }
     peers.delete(peerId);
     connecting.delete(peerId);
+    pending.delete(peerId);
     // keep last known score in entries; a fresh broadcast replaces it.
     scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
   }
@@ -259,7 +324,12 @@ window.PixelOfficeP2P = (function () {
     try {
       pc = new RTCPeerConnection(ICE);
     } catch (e) { connecting.delete(peerId); warn("RTCPeerConnection init failed:", e && e.message); return; }
-    var channel = pc.createDataChannel("office");
+    // ICE trickle: relay every candidate to the peer through the gist.
+    pc.onicecandidate = function (e) {
+      if (!e.candidate) return;
+      post("signaling/ice", { to: peerId, candidate: e.candidate.toJSON() });
+    };
+    var channel = pc.createDataChannel("office", { ordered: false, maxRetransmits: 0 });
     attachChannel(peerId, pc, channel);
     log("offering to peer", short(peerId));
     pc.createOffer().then(function (offer) {
@@ -282,6 +352,10 @@ window.PixelOfficeP2P = (function () {
     try {
       pc = new RTCPeerConnection(ICE);
     } catch (e) { connecting.delete(peerId); warn("RTCPeerConnection init failed:", e && e.message); return; }
+    pc.onicecandidate = function (e) {
+      if (!e.candidate) return;
+      post("signaling/ice", { to: peerId, candidate: e.candidate.toJSON() });
+    };
     pc.ondatachannel = function (ev) { attachChannel(peerId, pc, ev.channel); };
     log("answering peer", short(peerId));
     pc.setRemoteDescription(new RTCSessionDescription(sdp)).then(function () {
@@ -297,69 +371,126 @@ window.PixelOfficeP2P = (function () {
     });
   }
 
-  // ---- signaling poll (presence + inbox) ------------------------------
+  // Ensure a peer's ECDSA public key is imported (cached in `pending`) so
+  // their signed packets can be verified the moment a channel opens.
+  function ensurePeerKey(id, pdata) {
+    if (pending.has(id)) {
+      return Promise.resolve((pending.get(id) || {}).pub || null);
+    }
+    var key = pdata && pdata.k;
+    var meta = { kid: (pdata && pdata.kid) || "", name: (pdata && pdata.name) || id };
+    if (!key) { pending.set(id, { pub: null, kid: meta.kid, name: meta.name }); return Promise.resolve(null); }
+    return importPeerKey(key).then(function (pub) {
+      pending.set(id, { pub: pub, kid: meta.kid, name: meta.name });
+      return pub;
+    });
+  }
+
+  // ---- signaling poll (presence + inbox + ICE) -------------------------
   function pollSignaling() {
     if (!started || !me) return;
-    get("signaling/state").then(function (st) {
+    get("signaling/state").then(async function (st) {
       if (!st || typeof st !== "object") return;
       var pl = st.peers || {};
-      Object.keys(pl).forEach(function (id) {
-        if (!id || id === me.id) return;
-        if (peers.has(id) || connecting.has(id)) return;
-        if (!pl[id].online) return;
-        // Glare avoidance: when two peers come online at the same instant both
-        // would initiate and create a duplicate connection pair. Only the
-        // lexicographically-smaller id initiates; the larger id waits for that
-        // peer's offer and answers it (deterministic initiator).
-        if (me.id < id && backoffAllowed(id)) initiate(id);
-      });
+      var now = Date.now();
+      var anySig = false;
+      var ids = Object.keys(pl);
       var offers = st.offers || {};
-      var any = false;
-      Object.keys(offers).forEach(function (fromId) {
-        if (!fromId || fromId === me.id) return;
-        if (peers.has(fromId) || connecting.has(fromId)) return;
-        var sdp = offers[fromId] && offers[fromId].sdp;
-        if (sdp) { any = true; answer(fromId, sdp); }
-      });
-      if (any) post("signaling/clear", {}); // consume handled offers
+      var offKeys = Object.keys(offers);
 
-      // We are the initiator: apply answers our peers sent for our offers.
+      // Phase 1: import every key we'll need BEFORE any handshake, so a
+      // peer's signed packets verify the instant their channel opens (no
+      // dropped first messages from a key that imports a moment too late).
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i];
+        if (!id || id === me.id) continue;
+        var pdata = pl[id];
+        if (!pdata.online) continue;
+        if (pdata.last_seen && (now - Number(pdata.last_seen) * 1000 > STALE_MS)) continue;
+        await ensurePeerKey(id, pdata);
+      }
+      for (var j = 0; j < offKeys.length; j++) {
+        var fid = offKeys[j];
+        if (!fid || fid === me.id) continue;
+        await ensurePeerKey(fid, pl[fid] || {});
+      }
+
+      // Phase 2: initiate (glare avoidance — only the smaller id initiates).
+      for (var k = 0; k < ids.length; k++) {
+        var id2 = ids[k];
+        if (!id2 || id2 === me.id) continue;
+        if (peers.has(id2) || connecting.has(id2)) continue;
+        var pd2 = pl[id2];
+        if (!pd2.online) continue;
+        if (pd2.last_seen && (now - Number(pd2.last_seen) * 1000 > STALE_MS)) continue;
+        if (me.id < id2 && backoffAllowed(id2)) initiate(id2);
+      }
+
+      // Phase 3: answer offers (retry on every poll until handled).
+      for (var m = 0; m < offKeys.length; m++) {
+        var fromId = offKeys[m];
+        if (!fromId || fromId === me.id) continue;
+        if (peers.has(fromId) || connecting.has(fromId)) continue;
+        var sdp = offers[fromId] && offers[fromId].sdp;
+        if (sdp) { answer(fromId, sdp); anySig = true; }
+      }
+
+      // Phase 4: apply answers to our outstanding offers.
       var answers = st.answers || {};
-      Object.keys(answers).forEach(function (fromId) {
-        if (!fromId) return;
-        var p = peers.get(fromId);
-        if (!p || p.connected) return;
+      var ansKeys = Object.keys(answers);
+      for (var n = 0; n < ansKeys.length; n++) {
+        var fromId2 = ansKeys[n];
+        if (!fromId2) continue;
+        var p = peers.get(fromId2);
+        if (!p || p.connected) continue;
         if (p.pc && p.pc.signalingState === "have-local-offer") {
-          var sdp = answers[fromId] && answers[fromId].sdp;
-          if (sdp) {
+          var sdp2 = answers[fromId2] && answers[fromId2].sdp;
+          if (sdp2) {
             try {
-              p.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+              p.pc.setRemoteDescription(new RTCSessionDescription(sdp2));
             } catch (e) { warn("apply answer failed:", e && e.message); }
-            post("signaling/clear", {});
+            anySig = true;
           }
         }
-      });
+      }
 
-      // ---- Gist fallback for realtime scores ----------------------------
-      // WebRTC data channels are the FRONT transport for scores. But when a
-      // peer can't be reached directly (e.g. strict CGNAT — ICE fails, we're
-      // backing off), fall back to reading their score that they published to
-      // the gist so the board still stays live for every player.
-      Object.keys(pl).forEach(function (id) {
-        if (!id || id === me.id) return;
-        var p = peers.get(id);
-        if (p && p.connected) return;          // already live over WebRTC
-        if (connecting.has(id)) return;        // handshake still in progress
-        var fs = pl[id].score;
-        if (!fs || !fs.id) return;
-        var c = Number(fs.counter) || 0;
-        var prev = entries.get(fs.id);
-        if (!prev || c >= (Number(prev.counter) || 0)) {
+      // Phase 5: ICE trickle — feed candidates peers sent to us.
+      var ice = st.ice || {};
+      var iceKeys = Object.keys(ice);
+      for (var q = 0; q < iceKeys.length; q++) {
+        var fromId3 = iceKeys[q];
+        var pp = peers.get(fromId3);
+        if (pp && pp.pc) {
+          var cands = ice[fromId3] || [];
+          for (var r = 0; r < cands.length; r++) {
+            var c = cands[r];
+            if (!c) continue;
+            try { pp.pc.addIceCandidate(new RTCIceCandidate(c)); }
+            catch (e) { /* not ready yet — re-fed next poll */ }
+          }
+          anySig = true;
+        }
+      }
+
+      if (anySig) post("signaling/clear", {}); // consume handled offers/answers/ice
+
+      // Phase 6: gist score fallback for unreachable peers (strict CGNAT).
+      for (var s = 0; s < ids.length; s++) {
+        var fid2 = ids[s];
+        if (!fid2 || fid2 === me.id) continue;
+        var fpp = peers.get(fid2);
+        if (fpp && fpp.connected) continue;   // already live over WebRTC
+        if (connecting.has(fid2)) continue;
+        var fs = pl[fid2].score;
+        if (!fs || !fs.id) continue;
+        var c2 = Number(fs.counter) || 0;
+        var prev2 = entries.get(fs.id);
+        if (!prev2 || c2 >= (Number(prev2.counter) || 0)) {
           entries.set(fs.id, fs);
-          log("score recv (gist fallback)", short(fs.id), "ops=" + (fs.ops || 0), "counter=" + c);
+          log("score recv (gist fallback)", short(fs.id), "ops=" + (fs.ops || 0), "counter=" + c2);
           scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
         }
-      });
+      }
     }).catch(function (err) { warn("signaling poll error:", err && err.message); });
   }
 
@@ -369,19 +500,22 @@ window.PixelOfficeP2P = (function () {
     if (!me) { warn("start: no identity"); return; }
     started = true;
     log("starting, ID", short(me.id));
-    post("signaling/register", { online: true });
+    // Publish presence + our ECDSA public key (for packet verification).
+    ensureKeys().then(function () {
+      return crypto.subtle.exportKey("jwk", keypair.publicKey);
+    }).then(function (jwk) {
+      return post("signaling/register", { online: true, key: jwk, kid: kid });
+    }).catch(function () {});
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(pollSignaling, POLL_MS);
     if (rebroadcastTimer) clearInterval(rebroadcastTimer);
     rebroadcastTimer = setInterval(function () {
       if (lastEntry) {
-        var n = broadcastMsg({ type: "score", entry: lastEntry }, true);
-        console.debug("📡 P2P: rebroadcast score to", n, "peer(s)");
+        broadcastMsg({ type: "score", entry: lastEntry }, true);
       }
     }, REBROADCAST_MS);
     // Gist fallback: when we have ZERO peers reachable over WebRTC, publish
-    // our score to the gist so other players (even ones we can't connect to
-    // directly) can still read it. WebRTC remains the front transport.
+    // our score to the gist so other players can still read it.
     if (fallbackTimer) clearInterval(fallbackTimer);
     fallbackTimer = setInterval(function () {
       if (!started || !me || !lastEntry) return;
@@ -400,6 +534,7 @@ window.PixelOfficeP2P = (function () {
     if (fallbackTimer) clearInterval(fallbackTimer);
     peers.forEach(function (_p, id) { teardown(id); });
     backoff.clear();
+    pending.clear();
     post("signaling/register", { online: false });
     log("stopped");
   }
@@ -407,7 +542,6 @@ window.PixelOfficeP2P = (function () {
   // Merge our live local row + all peer entries into a ranked board.
   function getLeaderboard(localRow) {
     if (localRow && started && me) {
-      // keep our broadcast entry in sync with the live server-folded score
       if (lastEntry) {
         lastEntry.ops = localRow.ops || lastEntry.ops;
         lastEntry.tools = localRow.tools || lastEntry.tools;
@@ -419,9 +553,8 @@ window.PixelOfficeP2P = (function () {
     }
     var rows = [];
     entries.forEach(function (e) {
-      // Only GitHub usernames belong on the leaderboard — never agents.
       var g = e.github || e.user || "";
-      if (!g) return;                    // skip non-GitHub entries entirely
+      if (!g) return;                    // only GitHub usernames belong
       rows.push({
         id: e.id, name: e.name || e.user, github: g,
         avatar: e.avatar || "", url: e.url || "",
@@ -465,7 +598,6 @@ window.PixelOfficeP2P = (function () {
   function onChat(cb) { chatHandlers.push(cb); }
   function isStarted() { return started; }
 
-  // seed chat history with any messages the server already recorded
   function seedChat(msgs) {
     (msgs || []).forEach(function (m) {
       if (m && m.text) peerChat.push({

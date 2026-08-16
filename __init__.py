@@ -626,7 +626,7 @@ def _mutate_signaling(fn, retries=4) -> bool:
     return False
 
 
-def signaling_register(online: bool) -> Dict[str, Any]:
+def signaling_register(online: bool, key: Any = None, kid: str = "") -> Dict[str, Any]:
     """Register/unregister this instance's presence in the shared signaling doc."""
     me = _peer_id()
     ident = _load_identity() or {}
@@ -642,9 +642,12 @@ def signaling_register(online: bool) -> Dict[str, Any]:
                 "online": True,
                 "last_seen": time.time(),
                 "pid": os.getpid(),
+                "k": key,                       # ECDSA public key (JWK) for packet signing
+                "kid": kid or "",               # short key id (auth checks key rotation)
                 "offers": (peers.get(me) or {}).get("offers", {}),
                 "answers": (peers.get(me) or {}).get("answers", {}),
                 "score": (peers.get(me) or {}).get("score", {}),
+                "ice": {},                       # reset candidate mailbox on (re)register
             }
         else:
             peers.pop(me, None)
@@ -662,11 +665,13 @@ def signaling_state() -> Dict[str, Any]:
     for p in peers.values():
         p.pop("offers", None)
         p.pop("answers", None)
+        p.pop("ice", None)
     return {
         "me": me,
         "peers": peers,
         "offers": self_entry.get("offers", {}),
         "answers": self_entry.get("answers", {}),
+        "ice": self_entry.get("ice", {}),      # ICE candidates peers sent TO me
         "ts": time.time(),
     }
 
@@ -694,7 +699,7 @@ def signaling_send_answer(to: str, sdp: Any) -> bool:
 
 
 def signaling_clear_inbox() -> None:
-    """Clear my offer/answer mailboxes (after consuming them)."""
+    """Clear my offer/answer/ice mailboxes (after consuming them)."""
     me = _peer_id()
 
     def _reg(doc):
@@ -702,7 +707,25 @@ def signaling_clear_inbox() -> None:
         if p:
             p["offers"] = {}
             p["answers"] = {}
+            p["ice"] = {}
     _mutate_signaling(_reg)
+
+
+def signaling_send_ice(to: str, candidate: Any) -> bool:
+    """Trickle an ICE candidate from me to peer `to` via the shared doc.
+
+    Mirrors IdleViber's ICE trickle so peers that gather candidates after
+    their SDP still connect reliably behind NAT. Candidates accumulate in a
+    per-peer mailbox and are consumed from ``signaling_state``.
+    """
+    me = _peer_id()
+
+    def _reg(doc):
+        peers = doc.setdefault("peers", {})
+        peer = peers.setdefault(to, {"online": False})
+        bucket = peer.setdefault("ice", {})
+        bucket.setdefault(me, []).append(candidate)
+    return _mutate_signaling(_reg)
 
 
 def signaling_post_score(entry: Dict[str, Any]) -> bool:
@@ -1721,7 +1744,11 @@ def _serve() -> None:
                     self._send_bytes(json.dumps(msg or {"ok": False}).encode("utf-8"),
                                      "application/json")
                 elif path == "/signaling/register":
-                    st = signaling_register(bool(body.get("online", True)))
+                    st = signaling_register(
+                        bool(body.get("online", True)),
+                        body.get("key"),
+                        str(body.get("kid") or ""),
+                    )
                     self._send_bytes(json.dumps(st).encode("utf-8"), "application/json")
                 elif path == "/signaling/offer":
                     ok = signaling_send_offer(str(body.get("to") or ""), body.get("sdp"))
@@ -1736,6 +1763,11 @@ def _serve() -> None:
                     self._send_bytes(b'{"ok":true}', "application/json")
                 elif path == "/signaling/score":
                     ok = signaling_post_score(body.get("entry") or {})
+                    self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
+                                     "application/json")
+                elif path == "/signaling/ice":
+                    ok = signaling_send_ice(str(body.get("to") or ""),
+                                            body.get("candidate"))
                     self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
                                      "application/json")
                 else:

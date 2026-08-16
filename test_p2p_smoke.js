@@ -27,18 +27,19 @@ function TimerScheduler() {
 function makeServer() {
   return { peers: {}, offers: {}, answers: {},
     state(me) { return { me, peers: this.peers,
-      offers: this.offers[me] || {}, answers: this.answers[me] || {} }; } };
+      offers: this.offers[me] || {}, answers: this.answers[me] || {}, ice: {} }; } };
 }
 function makeFetch(srv, me) {
   return function (path, opts) {
     const p = String(path).split("?")[0];
     const body = (opts && opts.body) ? JSON.parse(opts.body) : {};
     let data = {};
-    if (p === "signaling/register") { if (body.online) srv.peers[me] = { online: true }; else delete srv.peers[me]; data = srv.state(me); }
+    if (p === "signaling/register") { if (body.online) srv.peers[me] = { online: true, k: body.key, kid: body.kid }; else delete srv.peers[me]; data = srv.state(me); }
     else if (p === "signaling/state") data = srv.state(me);
     else if (p === "signaling/offer") { (srv.offers[body.to] = srv.offers[body.to] || {})[me] = { sdp: body.sdp }; data = { ok: true }; }
     else if (p === "signaling/answer") { (srv.answers[body.to] = srv.answers[body.to] || {})[me] = { sdp: body.sdp }; data = { ok: true }; }
     else if (p === "signaling/clear") { srv.offers[me] = {}; srv.answers[me] = {}; data = { ok: true }; }
+    else if (p === "signaling/ice") { data = { ok: true }; }
     else data = {};
     return Promise.resolve({ json: () => Promise.resolve(data) });
   };
@@ -94,6 +95,12 @@ function loadInstance(id, name, srv, logs) {
                debug: (...a) => logs.push("DEBUG " + a.join(" ")) },
     RTCPeerConnection: FakeRTC,
     RTCSessionDescription: function (d) { this.type = d.type; this.sdp = d.sdp; },
+    RTCIceCandidate: function (c) { this.candidate = c && c.candidate; },
+    crypto: require("crypto").webcrypto,
+    btoa: (s) => Buffer.from(s, "binary").toString("base64"),
+    atob: (s) => Buffer.from(s, "base64").toString("binary"),
+    TextEncoder: require("util").TextEncoder,
+    TextDecoder: require("util").TextDecoder,
     setTimeout: sched.setTimeout.bind(sched), clearTimeout: sched.clearTimeout.bind(sched),
     setInterval: sched.setInterval.bind(sched), clearInterval: sched.clearInterval.bind(sched),
     Map, Set, JSON, Date, Math, Number, String, Object, Array, Promise,
@@ -113,8 +120,10 @@ function run() {
   B.api.start({ github: "bob", name: "Bob" });
 
   const flush = () => new Promise(r => setImmediate(r));
+  const settle = (ms = 120) => new Promise(r => setTimeout(r, ms));
 
   return (async () => {
+    await settle(); // let ECDSA keygen + presence/key registration complete
     // Round 1: A (alice < bob) initiates -> offer. B sees offer -> answers.
     A.sched.fireIntervals();  await flush();   // A writes offer
     B.sched.fireIntervals();  await flush();   // B answers (creates answerer pc)
@@ -123,13 +132,14 @@ function run() {
     // Round 2: A applies B's answer (channel already opened by the bridge).
     A.sched.fireIntervals();  await flush();
     B.sched.fireIntervals();  await flush();
+    await settle(); // ensure pubkeys imported + keypair ready before signing
 
     // Exchange data.
     A.api.broadcastScore({ ops: 123, tools: 4, sessions: 2, time_s: 99, tier: "gold" });
     B.api.broadcastScore({ ops: 50, tools: 1, sessions: 1, time_s: 10, tier: "silver" });
     B.api.sendChat("hello from bob");
     A.api.sendChat("hi alice here");
-    await flush();
+    await settle();
 
     // ---- read clean boards right after the exchange (pre-hardening) ----
     const lbA0 = A.api.getLeaderboard({ ops: 123 });
@@ -144,26 +154,26 @@ function run() {
     // (a) oversized (>64k) score payload must be ignored, no crash
     const beforeBig = A.api.getLeaderboard({ ops: 123 }).length;
     lastBridge.offererDC._send('x'.repeat(70000));
-    await flush();
+    await settle();
     const afterBig = A.api.getLeaderboard({ ops: 123 }).length;
     if (afterBig !== beforeBig) hardenedOk = false;
 
     // (b) malformed JSON must be ignored, no crash
     lastBridge.offererDC._send("{not valid json!!");
     lastBridge.offererDC._send(JSON.stringify({ type: "score" })); // missing entry
-    await flush();
+    await settle();
 
     // (c) own-echo (a peer echoing our own entry) must be ignored
     lastBridge.offererDC._send(JSON.stringify({
       type: "score", entry: { id: "alice", counter: 999, ops: 9999 } }));
-    await flush();
+    await settle();
     const aliceRow = A.api.getLeaderboard({ ops: 123 }).find(r => r.github === "alice");
     if (!aliceRow || aliceRow.ops === 9999) hardenedOk = false;
 
     // (d) bad peer id in score entry (too long) ignored
     lastBridge.offererDC._send(JSON.stringify({
       type: "score", entry: { id: "z".repeat(300), counter: 1, ops: 5 } }));
-    await flush();
+    await settle();
     const boardLen = A.api.getLeaderboard({ ops: 123 }).length;
     if (boardLen > 2) hardenedOk = false; // only alice+bob allowed
 
