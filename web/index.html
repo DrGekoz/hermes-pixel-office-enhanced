@@ -355,6 +355,9 @@
   .un-card{display:flex;flex-direction:column;align-items:center;gap:6px}
   .un-card img{width:72px;height:72px;image-rendering:pixelated;object-fit:contain;
     border:1px solid var(--border);border-radius:6px;padding:6px;background:var(--bg)}
+  .un-list{max-height:38vh;overflow-y:auto;margin:0 0 12px;border:1px solid var(--borderDim);
+    border-radius:4px;text-align:left;background:var(--bg)}
+  .un-list .tier-row:last-child{border-bottom:none}
   .un-card .un-lbl{color:var(--sub);font-size:.75em}
   .un-card.new img{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
   .un-arrow{color:var(--sub);font-size:1.2em}
@@ -467,7 +470,7 @@
 // ── single source of truth for the office version ─────────────────────────
 // Bump this to match the git tag on every release (also shown in the About
 // modal via the #about-version element).
-const OFFICE_VERSION = "v1.4.1";
+const OFFICE_VERSION = "v1.4.2";
 // ── host detection ──────────────────────────────────────────────────────
 const IN_VSCODE = typeof acquireVsCodeApi !== "undefined";
 const vsapi = IN_VSCODE ? acquireVsCodeApi() : null;
@@ -841,7 +844,7 @@ let lastTierT=0, unlockInit=false;
 function myCurrentTier(){
   if(!state||!state.identity)return null;
   const board=mergeBoards(currentBoard(),loadCachedBoard());
-  const my=board.find(r=>isMe(r.id));
+  const my=board.find(isMine);
   return my?(tierForOps(my.ops,my.tools,my.sessions)||null):null;
 }
 function checkTierUnlock(){
@@ -862,14 +865,30 @@ function checkTierUnlock(){
 }
 function showUnlockModal(tier){
   const board=mergeBoards(currentBoard(),loadCachedBoard());
-  const my=board.find(r=>isMe(r.id));
+  const my=board.find(isMine);
   const curIcon=(my&&my.tierIcon)||"";
   const el=document.getElementById("unlock");
+  // Which tiers have been unlocked — computed LOCALLY from this user's own
+  // data: every rung from Tier #1 up to (and including) the tier just reached.
+  const tiers=(window.OFFICE_TIERS && window.OFFICE_TIERS.length)
+    ? window.OFFICE_TIERS : (state && state.tiers ? state.tiers : []);
+  const myIdx=Math.max(0,(tier.t||1)-1);
+  const unlocked=tiers.slice(0,myIdx+1);
+  const listHtml=unlocked.map(function(t,i){
+    const cur=i===myIdx;
+    return '<div class="tier-row'+(cur?' me current':'')+'">'+
+      '<span class="tier-rank">#'+t.t+'</span>'+
+      '<img class="tier-ic" src="'+iconPath(t.icon)+'" alt="">'+
+      '<span class="tier-nm">'+esc(t.name)+'</span>'+
+      '<span class="tier-ops"><b>'+fmtNum(t.ops)+'</b> Ops'+(cur?' · you':'')+'</span>'+
+      '</div>';
+  }).join("");
   el.innerHTML=
     '<div class="ptitle"><span>TIER UNLOCKED!</span><span class="pclose" data-close="unlock">✕</span></div>'+
     '<div class="un-body">'+
       '<div class="un-title">'+esc(tier.name)+' · Tier '+tier.t+'</div>'+
-      '<div class="un-sub">You reached Tier '+tier.t+' ('+fmtNum(tier.ops)+' Ops). Choose your icon.</div>'+
+      '<div class="un-sub">Unlocked '+unlocked.length+' of '+tiers.length+' tiers (#'+(unlocked[0]?unlocked[0].t:1)+' → #'+tier.t+').</div>'+
+      (unlocked.length?'<div class="un-list">'+listHtml+'</div>':'')+
       '<div class="un-compare">'+
         '<div class="un-card new"><img src="'+iconPathLarge(tier.icon)+'" alt="" onerror="this.style.display=\'none\'"><span class="un-lbl">New · #'+tier.t+'</span></div>'+
         '<div class="un-arrow">→</div>'+
@@ -1109,7 +1128,7 @@ document.addEventListener("click", function (e) {
 
 // ── leaderboard ────────────────────────────────────────────────────────
 function tierRowHtml(r){
-  const dev=isDev(r.github), me=isMe(r.id);
+  const dev=isDev(r.github), me=isMine(r);
   const tier=(r.tier&&r.tier.t)?r.tier:(tierForOps(r.ops,r.tools,r.sessions)||{name:"—",icon:"",t:1});
   const tIcon=rowTierIcon(r)||tier.icon||"";
   return '<div class="lb-row'+(me?" me":"")+'" data-id="'+esc(r.id)+'">'+
@@ -1877,7 +1896,7 @@ function tierForOps(ops, calls, sessions){
 function myTierName(){
   if(!state||!state.identity)return null;
   const board=mergeBoards(currentBoard(),loadCachedBoard());
-  const my=board.find(r=>isMe(r.id));
+  const my=board.find(isMine);
   return my ? (tierForOps(my.ops,my.tools,my.sessions) || my.tier) : null;
 }
 // _tiersSig guards against rebuilding all 500 icon rows on every poll tick /
@@ -1932,6 +1951,9 @@ function chatChime(){ // gentle two-note chat "ding" (distinct from approval chi
   if(!chatSoundOn)return;
   try{
     audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    // Browsers suspend AudioContext until a gesture/resume; without this the
+    // first incoming-chat chime is silent. Resume (async, fire-and-forget).
+    if(audioCtx.state==="suspended"){try{audioCtx.resume();}catch(e){}}
     [880,1320].forEach((f,i)=>{
       const o=audioCtx.createOscillator(),g=audioCtx.createGain();
       o.type="sine";o.frequency.value=f;
