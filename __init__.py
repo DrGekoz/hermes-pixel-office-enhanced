@@ -393,18 +393,76 @@ def _set_gist_id(gid: str) -> None:
         pass
 
 
+_SIGNALING_DESC = "Hermes Pixel Office — WebRTC signaling (handshake only)"
+
+# Well-known shared signaling gist (PUBLIC). Any machine — with any token —
+# can read it, so players converge on the same mesh even when a machine has
+# never been configured with a gist id. NOTE: like all GitHub gists it is
+# still single-owner for writes; players must use the owner token to post
+# their presence/SDP, but they can always READ everyone else's.
+_WELL_KNOWN_GIST = "08842d6294ebb262df0886f460f802d5"
+
+
+def _gist_has_signaling(gid: str) -> bool:
+    """True if gist ``gid`` is readable and carries a signaling.json file."""
+    if not gid:
+        return False
+    data = _gh_get(f"https://api.github.com/gists/{gid}")
+    if not data:
+        return False
+    files = data.get("files") or {}
+    return "signaling.json" in files
+
+
+def _find_existing_signaling_gist() -> str:
+    """Reuse a signaling gist the authenticated user already owns/shared.
+
+    Every machine that logs in with the same token lists the SAME set of
+    gists, so a fresh machine finds the existing signaling gist here instead
+    of silently creating a brand-new private gist (which was why two players
+    never saw each other). Falls back to the well-known PUBLIC gist so any
+    machine — even one using a different token — still joins the same mesh.
+    Returns '' when none exists yet.
+    """
+    try:
+        data = _gh_get("https://api.github.com/gists?per_page=100")
+        for g in data or []:
+            gid = g.get("id")
+            if not gid:
+                continue
+            files = g.get("files") or {}
+            desc = g.get("description") or ""
+            if "signaling.json" in files or desc == _SIGNALING_DESC:
+                return str(gid)
+    except Exception:
+        pass
+    if _gist_has_signaling(_WELL_KNOWN_GIST):
+        return _WELL_KNOWN_GIST
+    return ""
+
+
 def _ensure_gist() -> str:
-    """Return the signaling gist id, creating it if needed. '' on failure."""
+    """Return the signaling gist id, creating it if needed. '' on failure.
+
+    Resolution order: local config/file id -> existing signaling gist on the
+    authenticated account -> create one. The "reuse existing" step is what
+    makes multi-machine P2P work: machines sharing a token all land in the
+    same mesh rather than splitting into separate private gists.
+    """
     gid = _gist_id()
     if gid:
         return gid
     if not _load_token():
         return ""
+    gid = _find_existing_signaling_gist()
+    if gid:
+        _set_gist_id(gid)
+        return gid
     body = _gh_json(
         "https://api.github.com/gists",
         {
-            "description": "Hermes Pixel Office — WebRTC signaling (handshake only)",
-            "public": False,
+            "description": _SIGNALING_DESC,
+            "public": True,
             "files": {"signaling.json": {"content": "{}"}},
         },
         method="POST",
@@ -546,14 +604,26 @@ def _signaling_write(doc: Dict[str, Any]) -> bool:
     return ok
 
 
-def _mutate_signaling(fn) -> bool:
-    """Read the signaling doc, apply fn(doc) in place, write it back."""
-    try:
-        doc = _signaling_doc()
-        fn(doc)
-        return _signaling_write(doc)
-    except Exception:
-        return False
+def _mutate_signaling(fn, retries=4) -> bool:
+    """Read the signaling doc, apply fn(doc) in place, write it back.
+
+    GitHub gists offer no compare-and-swap, so when two machines PATCH the
+    same signaling gist at the same instant one write can clobber the other
+    (dropping a presence entry or an SDP message). A bounded retry with
+    jitter re-reads a fresh base each attempt and re-applies fn, shrinking
+    that lost-update window so a handshake offer/answer is rarely eaten.
+    """
+    import random as _random
+    for _ in range(retries):
+        try:
+            doc = _signaling_doc()
+            fn(doc)
+            if _signaling_write(doc):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.2 + _random.random() * 0.3)
+    return False
 
 
 def signaling_register(online: bool) -> Dict[str, Any]:
@@ -574,6 +644,7 @@ def signaling_register(online: bool) -> Dict[str, Any]:
                 "pid": os.getpid(),
                 "offers": (peers.get(me) or {}).get("offers", {}),
                 "answers": (peers.get(me) or {}).get("answers", {}),
+                "score": (peers.get(me) or {}).get("score", {}),
             }
         else:
             peers.pop(me, None)
@@ -632,6 +703,37 @@ def signaling_clear_inbox() -> None:
             p["offers"] = {}
             p["answers"] = {}
     _mutate_signaling(_reg)
+
+
+def signaling_post_score(entry: Dict[str, Any]) -> bool:
+    """Write this instance's latest score into the shared doc as a FALLBACK.
+
+    WebRTC data channels are the primary/"front" transport for realtime
+    scores. This is ONLY used so a peer that can't be reached directly over
+    WebRTC (e.g. strict CGNAT) can still read our score through the gist.
+    """
+    me = _peer_id()
+
+    def _reg(doc):
+        peers = doc.setdefault("peers", {})
+        self_e = peers.setdefault(me, {"online": True})
+        self_e["online"] = True
+        self_e["last_seen"] = time.time()
+        self_e["score"] = {
+            "id": (entry or {}).get("id") or me,
+            "github": (entry or {}).get("github") or me,
+            "name": (entry or {}).get("name") or me,
+            "avatar": (entry or {}).get("avatar", ""),
+            "url": (entry or {}).get("url", ""),
+            "ops": (entry or {}).get("ops", 0),
+            "tools": (entry or {}).get("tools", 0),
+            "sessions": (entry or {}).get("sessions", 0),
+            "time_s": (entry or {}).get("time_s", 0),
+            "tier": (entry or {}).get("tier"),
+            "counter": (entry or {}).get("counter", 0),
+            "ts": (entry or {}).get("ts", time.time()),
+        }
+    return _mutate_signaling(_reg)
 
 
 # ---------------------------------------------------------------------------
@@ -1632,6 +1734,10 @@ def _serve() -> None:
                 elif path == "/signaling/clear":
                     signaling_clear_inbox()
                     self._send_bytes(b'{"ok":true}', "application/json")
+                elif path == "/signaling/score":
+                    ok = signaling_post_score(body.get("entry") or {})
+                    self._send_bytes(json.dumps({"ok": ok}).encode("utf-8"),
+                                     "application/json")
                 else:
                     self._send_bytes(b"not found", "text/plain", 404)
             except Exception:

@@ -42,6 +42,7 @@ window.PixelOfficeP2P = (function () {
   var started = false;
   var pollTimer = null;
   var rebroadcastTimer = null;
+  var fallbackTimer = null;    // posts our score to the gist when no peer is reachable via WebRTC
   var backoff = new Map();   // peerId -> {attempts, next}
 
   // ---- tiny logging helpers (IdleViber "📡 P2P:" style) ----------------
@@ -123,6 +124,19 @@ window.PixelOfficeP2P = (function () {
     lastEntry = e;
     entries.set(me.id, e);       // our own entry in the local board
     broadcastMsg({ type: "score", entry: e });
+  }
+
+  // Trimmed copy of our latest score, sized for the gist fallback (we don't
+  // want the full profile/theme/agents/modelboard payload in the shared doc).
+  function fallbackEntry() {
+    if (!lastEntry) return null;
+    return {
+      id: lastEntry.id, github: lastEntry.github, name: lastEntry.name,
+      avatar: lastEntry.avatar, url: lastEntry.url,
+      ops: lastEntry.ops, tools: lastEntry.tools, sessions: lastEntry.sessions,
+      time_s: lastEntry.time_s, tier: lastEntry.tier,
+      counter: lastEntry.counter, ts: Date.now(),
+    };
   }
 
   // ---- mesh primitives ------------------------------------------------
@@ -325,6 +339,27 @@ window.PixelOfficeP2P = (function () {
           }
         }
       });
+
+      // ---- Gist fallback for realtime scores ----------------------------
+      // WebRTC data channels are the FRONT transport for scores. But when a
+      // peer can't be reached directly (e.g. strict CGNAT — ICE fails, we're
+      // backing off), fall back to reading their score that they published to
+      // the gist so the board still stays live for every player.
+      Object.keys(pl).forEach(function (id) {
+        if (!id || id === me.id) return;
+        var p = peers.get(id);
+        if (p && p.connected) return;          // already live over WebRTC
+        if (connecting.has(id)) return;        // handshake still in progress
+        var fs = pl[id].score;
+        if (!fs || !fs.id) return;
+        var c = Number(fs.counter) || 0;
+        var prev = entries.get(fs.id);
+        if (!prev || c >= (Number(prev.counter) || 0)) {
+          entries.set(fs.id, fs);
+          log("score recv (gist fallback)", short(fs.id), "ops=" + (fs.ops || 0), "counter=" + c);
+          scoreHandlers.forEach(function (cb) { try { cb(); } catch (_) {} });
+        }
+      });
     }).catch(function (err) { warn("signaling poll error:", err && err.message); });
   }
 
@@ -344,12 +379,25 @@ window.PixelOfficeP2P = (function () {
         console.debug("📡 P2P: rebroadcast score to", n, "peer(s)");
       }
     }, REBROADCAST_MS);
+    // Gist fallback: when we have ZERO peers reachable over WebRTC, publish
+    // our score to the gist so other players (even ones we can't connect to
+    // directly) can still read it. WebRTC remains the front transport.
+    if (fallbackTimer) clearInterval(fallbackTimer);
+    fallbackTimer = setInterval(function () {
+      if (!started || !me || !lastEntry) return;
+      var connectedCount = 0;
+      peers.forEach(function (p) { if (p.connected) connectedCount++; });
+      if (connectedCount === 0) {
+        post("signaling/score", { entry: fallbackEntry() });
+      }
+    }, 10000);
   }
 
   function stop() {
     started = false;
     if (pollTimer) clearInterval(pollTimer);
     if (rebroadcastTimer) clearInterval(rebroadcastTimer);
+    if (fallbackTimer) clearInterval(fallbackTimer);
     peers.forEach(function (_p, id) { teardown(id); });
     backoff.clear();
     post("signaling/register", { online: false });
