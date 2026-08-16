@@ -11,3 +11,4 @@ hooks:
   - on_session_end
   - pre_approval_request
   - post_approval_response
+  - pre_llm_call

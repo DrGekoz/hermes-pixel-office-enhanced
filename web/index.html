@@ -467,10 +467,35 @@
 // ── single source of truth for the office version ─────────────────────────
 // Bump this to match the git tag on every release (also shown in the About
 // modal via the #about-version element).
-const OFFICE_VERSION = "v1.4.0";
+const OFFICE_VERSION = "v1.4.1";
 // ── host detection ──────────────────────────────────────────────────────
 const IN_VSCODE = typeof acquireVsCodeApi !== "undefined";
 const vsapi = IN_VSCODE ? acquireVsCodeApi() : null;
+
+// ── external links in a real browser ─────────────────────────────────────
+// When the office runs inside an emulated/embedded browser (a VSCode webview,
+// Hermes Desktop webview, or any sandboxed iframe) a plain `target="_blank"`
+// anchor can be swallowed by the host. This delegated handler catches every
+// external http(s) link and routes it to the real browser: through the host
+// via postMessage when we're in the VSCode webview, otherwise via window.open
+// (with a same-frame fallback). In a normal top-level browser tab we leave the
+// anchor's default behavior alone.
+document.addEventListener("click", function (e) {
+  const t = e.target;
+  const a = (t && t.closest) ? t.closest("a[href]") : null;
+  if (!a) return;
+  const href = a.getAttribute("href") || "";
+  if (!/^https?:\/\//i.test(href)) return;
+  const embedded = IN_VSCODE || (window.top !== window.self);
+  if (!embedded) return;                 // real browser tab: default is fine
+  e.preventDefault();
+  if (IN_VSCODE && vsapi) {
+    vsapi.postMessage({ type: "openExternal", url: href });
+  } else {
+    const w = window.open(href, "_blank");
+    if (!w) { try { location.href = href; } catch (_) {} }
+  }
+}, true);
 
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let S = 4;                                  // pixel scale (auto-shrinks if crowded)
@@ -1067,6 +1092,21 @@ document.getElementById("gh-chip").onclick=()=>{
   if(myGitHub()){showProfile(myGitHub());}else{togglePanel("gh-connect");}
 };
 
+// ── click-outside closes modals ──────────────────────────────────────────
+// If a profile modal (or any panel) is open and the user clicks anywhere
+// outside that panel, close it. The panel-toggle buttons in the top bar are
+// excluded so their own handlers keep toggling correctly.
+const PANEL_TRIGGERS = "#lbBtn,#mbBtn,#chatBtn,#tiersBtn,#aboutBtn,#gh-chip";
+document.addEventListener("click", function (e) {
+  const t = e.target;
+  if (t && t.closest && t.closest(PANEL_TRIGGERS)) return; // let the toggle button handle it
+  document.querySelectorAll(".panel.open").forEach(function (p) {
+    if (!p.classList.contains("open")) return;
+    if (t && t.closest && t.closest("#" + p.id)) return;   // click is inside this panel
+    togglePanel(p.id, false);
+  });
+}, true);
+
 // ── leaderboard ────────────────────────────────────────────────────────
 function tierRowHtml(r){
   const dev=isDev(r.github), me=isMe(r.id);
@@ -1197,6 +1237,13 @@ function modelDisplayName(raw){
 // most-corrected model sinks to the bottom.
 function mergedModelBoard(){
   const local=(state && state.modelboard) || {};
+  // The local user's own github. Their local board is authoritative, so any
+  // peer/gist copy of THEIR modelboard is ignored — this is what prevents the
+  // "duplicate packet + local" bug where the same board (local /state + the
+  // local row riding inside a peer packet) gets summed twice and doubles the
+  // corrections.
+  const lb=state && state.leaderboard && state.leaderboard[0];
+  const localGh=lb && lb.github ? String(lb.github).toLowerCase() : "";
   const rows=new Map();
   // Pre-seed every ChatGPT model with 0 corrections so the full roster is
   // always visible — not just the models Jekyll-Hyde has already audited.
@@ -1204,11 +1251,8 @@ function mergedModelBoard(){
     rows.set(m,{model:m, corrections:0, sandbagged:0, genuine:0, uncertain:0,
       escalated:0, last_corrected:0, streak:0, seeded:true});
   });
-  const all=[local].concat(
-    currentBoard().map(function(r){return r.modelboard||null}).filter(Boolean)
-  );
-  all.forEach(function(mb){
-    if(!mb || !mb.installed)return;
+  function fold(mb){
+    if(!mb || !mb.installed) return;
     (mb.models||[]).forEach(function(r){
       // Fold real data onto the canonical model id so a ChatGPT model's
       // corrections land on the right roster row (not a bare "unknown").
@@ -1221,6 +1265,15 @@ function mergedModelBoard(){
       cur.streak+=r.streak;
       rows.set(key,cur);
     });
+  }
+  const folded=new Set();           // modelboard objects already folded
+  if(local && local.installed){ fold(local); folded.add(local); }
+  currentBoard().forEach(function(r){
+    const mb=r.modelboard||null;
+    if(!mb || !mb.installed) return;
+    if(folded.has(mb)) return;                          // same object as local board
+    if(r.github && String(r.github).toLowerCase()===localGh) return; // local user's own copy
+    folded.add(mb); fold(mb);
   });
   const out=[...rows.values()];
   out.sort(function(a,b){

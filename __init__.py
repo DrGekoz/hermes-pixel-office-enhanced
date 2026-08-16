@@ -1287,6 +1287,102 @@ def _read_jekyll_hyde_state():
     return out
 
 
+# ── Agent model reporting ─────────────────────────────────────────────────
+# Agents tell the office which model they use via a `pre_llm_call` hook. This
+# gives the Model Leaderboard a reliable, independent source of the real model
+# name (so a ChatGPT model never shows as "unknown"), separate from jekyll-hyde.
+_OFFICE_CHATGPT_ROSTER = [
+    "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-5",
+    "gpt-4o-mini", "gpt-4o", "gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1",
+    "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo",
+]
+_OFFICE_CHATGPT_ALIAS = {
+    "gpt4o": "gpt-4o", "gpt4o-mini": "gpt-4o-mini", "chatgpt-4o": "gpt-4o",
+    "o3": "gpt-5", "o4-mini": "gpt-4o-mini",
+}
+_MODEL_WRITE_TS = 0.0
+
+
+def _canonical_model_name(raw: Any) -> str:
+    """Normalize a model id to a stable display name (mirror of the frontend's
+    canonicalModelId). Strips provider prefixes and maps ChatGPT ids onto the
+    roster. Returns the stripped id for non-ChatGPT models, or '' if unparseable.
+    """
+    if raw is None:
+        return ""
+    s = str(raw).strip().lower()
+    if not s or s in ("unknown", "none", "null"):
+        return ""
+    if s.startswith("openrouter/"):
+        s = s[len("openrouter/"):]
+    s = s.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    if s.startswith("chatgpt-"):
+        s = "gpt-" + s[len("chatgpt-"):]
+    if not s:
+        return ""
+    if s in _OFFICE_CHATGPT_ALIAS:
+        return _OFFICE_CHATGPT_ALIAS[s]
+    if s in _OFFICE_CHATGPT_ROSTER:
+        return s
+    for cand in sorted(_OFFICE_CHATGPT_ROSTER, key=len, reverse=True):
+        if s.startswith(cand):
+            return cand
+    return s
+
+
+def _agent_models_path() -> Path:
+    return _office_dir() / "agent_models.json"
+
+
+def _load_agent_models() -> Dict[str, Dict[str, Any]]:
+    """models: canonical name -> {name, calls, last_seen}. {} on failure."""
+    p = _agent_models_path()
+    try:
+        if p.exists():
+            d = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                return d
+    except Exception:
+        pass
+    return {}
+
+
+def _record_agent_model(model: Any) -> None:
+    """Record which model an agent used on this office so the Model Leaderboard
+    shows the real model name (never 'unknown'). Observe-only; never blocks.
+    Writes are throttled to <=1 per 3s to keep disk churn low during hot turns.
+    """
+    global _MODEL_WRITE_TS
+    name = _canonical_model_name(model)
+    if not name:
+        return
+    try:
+        data = _load_agent_models()
+        rec = data.get(name) or {"name": name, "calls": 0, "last_seen": 0.0}
+        rec["calls"] = int(rec.get("calls", 0)) + 1
+        rec["last_seen"] = time.time()
+        data[name] = rec
+        now = time.time()
+        if now - _MODEL_WRITE_TS < 3.0:
+            return  # throttled; in-memory only until the next write window
+        _MODEL_WRITE_TS = now
+        if len(data) > 200:
+            for k in sorted(data, key=lambda k: data[k].get("last_seen", 0))[: len(data) - 200]:
+                data.pop(k, None)
+        _agent_models_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.debug("pixel-office record model failed: %s", exc)
+
+
+def _on_pre_llm_call(**kwargs) -> None:
+    """Fired before each LLM call — tells the office which model the agent uses."""
+    try:
+        _record_agent_model(kwargs.get("model"))
+    except Exception:
+        pass
+    return None
+
+
 def _model_leaderboard() -> Dict[str, Any]:
     """Aggregate jekyll-hyde audit data into a rich Model Leaderboard.
 
@@ -1309,20 +1405,32 @@ def _model_leaderboard() -> Dict[str, Any]:
     if not state["present"]:
         return {"models": [], "installed": False}
 
-    tally = {str(k): int(v or 0) for k, v in state["corrections"].items()}
+    # Models the office's own agents have reported using (pre_llm_call hook).
+    agent_models = _load_agent_models()
+    # Most recently used model — used to re-attribute any activation Jekyll-Hyde
+    # logged as "unknown" (it could not name the model) to the real active model.
+    last_active = ""
+    if agent_models:
+        last_active = max(agent_models, key=lambda k: agent_models[k].get("last_seen", 0))
+
+    def norm(m: Any) -> str:
+        c = _canonical_model_name(m)
+        return c or (last_active or "unknown")
+
     agg: Dict[str, Dict[str, Any]] = {}
-    for m in tally:
-        agg[m] = {
-            "model": m, "corrections": 0,
+    for m in state["corrections"]:
+        key = norm(m)
+        agg.setdefault(key, {
+            "model": key, "corrections": 0,
             "sandbagged": 0, "genuine": 0, "uncertain": 0, "escalated": 0,
             "last_corrected": 0.0, "streak": 0,
-        }
+        })
 
     # Fold activation records (they carry verdict + model + ts) into the tally.
     for rec in state["activations"]:
-        m = str(rec.get("model") or "unknown")
-        row = agg.setdefault(m, {
-            "model": m, "corrections": 0,
+        key = norm(rec.get("model"))
+        row = agg.setdefault(key, {
+            "model": key, "corrections": 0,
             "sandbagged": 0, "genuine": 0, "uncertain": 0, "escalated": 0,
             "last_corrected": 0.0, "streak": 0,
         })
@@ -1342,14 +1450,25 @@ def _model_leaderboard() -> Dict[str, Any]:
 
     # Streak: consecutive activations since the last genuine verdict, per model.
     for rec in state["activations"]:
-        m = str(rec.get("model") or "unknown")
-        row = agg.get(m)
+        key = norm(rec.get("model"))
+        row = agg.get(key)
         if row is None:
             continue
         if str(rec.get("verdict") or "uncertain") == "genuine":
             row["streak"] = 0
         else:
             row["streak"] += 1
+
+    # Ensure every model the office's agents actually use appears (even with 0
+    # corrections) so ChatGPT models show under their real name rather than
+    # being absent or labelled "unknown".
+    for name, rec in agent_models.items():
+        key = _canonical_model_name(name) or name
+        agg.setdefault(key, {
+            "model": key, "corrections": 0,
+            "sandbagged": 0, "genuine": 0, "uncertain": 0, "escalated": 0,
+            "last_corrected": 0.0, "streak": 0,
+        })
 
     rows = list(agg.values())
     # Leaderboard logic: fewest corrections first; ties broken by fewer
@@ -2149,6 +2268,7 @@ def register(ctx: Any) -> None:
     ctx.register_hook("subagent_stop", _subagent_stop)
     ctx.register_hook("pre_approval_request", _pre_approval_request)
     ctx.register_hook("post_approval_response", _post_approval_response)
+    ctx.register_hook("pre_llm_call", _on_pre_llm_call)
     logger.info(
         "pixel-office registered — office at http://127.0.0.1:%s once events flow",
         _resolve_port(),
