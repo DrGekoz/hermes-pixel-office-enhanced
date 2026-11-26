@@ -1727,11 +1727,26 @@ def build_state() -> Dict[str, Any]:
         if not key:
             continue
         if kind == "session_start":
-            a = ensure(key, ev)
-            a["status"] = "idle"
-            plat = ev.get("platform") or ""
-            a["label"] = f"{plat or 'hermes'} {key[-6:]}"
-            a["detail"] = "session started"
+            existing = agents.get(key)
+            # A background agent the voice bridge started announces itself AND
+            # then the run's own api_server session starts under the same id.
+            # That is ONE agent, not two: keep the announcement's identity and
+            # label instead of relabelling it as an anonymous run.
+            if existing and existing.get("kind") in ("subagent", "background"):
+                existing["status"] = "working"
+                existing["updated_at"] = ev.get("ts", now)
+            else:
+                a = ensure(key, ev)
+                a["status"] = "idle"
+                plat = ev.get("platform") or ""
+                if plat == "voice":
+                    # the hermes-talk realtime session itself: the voice you talk to
+                    a["kind"] = "voice"
+                    a["label"] = "hermes talk voice"
+                    a["detail"] = "realtime session"
+                else:
+                    a["label"] = f"{plat or 'hermes'} {key[-6:]}"
+                    a["detail"] = "session started"
         elif kind == "session_end":
             if key in agents:
                 agents[key]["status"] = "gone"
@@ -1743,11 +1758,15 @@ def build_state() -> Dict[str, Any]:
                 ev2 = dict(ev)
                 ev2["session_id"] = ck
                 a = ensure(ck, ev2)
-                a["kind"] = "subagent"
-                a["label"] = _short(ev.get("child_goal"), 26) or f"sub {ck[-6:]}"
+                background = str(ev.get("child_role") or "") == "background"
+                a["kind"] = "background" if background else "subagent"
+                goal = _short(ev.get("child_goal"), 26) or f"sub {ck[-6:]}"
+                a["label"] = ("bg · " + goal) if background else goal
                 a["status"] = "working"
                 a["detail"] = _short(ev.get("child_goal"))
                 a["parent"] = str(ev.get("parent_session_id") or "")
+                if ev.get("origin"):
+                    a["origin"] = str(ev.get("origin"))
         elif kind == "subagent_stop":
             child = ev.get("child_session_id")
             if child and str(child) in agents:
@@ -2092,6 +2111,14 @@ def _serve() -> None:
                 elif path == "/state":
                     self._send_bytes(json.dumps(build_state()).encode("utf-8"),
                                      "application/json")
+                elif path == "/api/state":
+                    # Same state, proxied under /api/* so a launcher page served
+                    # from another origin (file://, a local helper port) can read
+                    # the office feed without tripping CORS, and so the UI talks
+                    # to exactly ONE origin (same-origin first, proxy fallback).
+                    self._send_bytes(
+                        json.dumps(build_state()).encode("utf-8"),
+                        "application/json; charset=utf-8")
                 elif path == "/modelboard":
                     self._send_bytes(
                         json.dumps(_model_leaderboard()).encode("utf-8"),

@@ -35,13 +35,19 @@
     user-select:none}
   #hdr .btn:hover{border-color:var(--accent);color:var(--accent)}
   #hdr .btn.on{color:var(--on);border-color:var(--on)}
-  /* stats strip — sits left of the "N agents" count, same font */
-  #stats{display:flex;align-items:center;gap:12px;font-size:1em;
+  /* stats strip — sits left of the "N agents" count, same font.
+     Each stat is a chip: icon + ticking number + label. */
+  #stats{display:flex;align-items:center;gap:6px;font-size:1em;
     letter-spacing:0.5px;color:var(--text);white-space:nowrap}
-  #stats .st{display:flex;align-items:center;gap:4px}
-  #stats .st b{color:var(--accent);font-weight:bold}
+  #stats .chip{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;
+    border:1px solid var(--borderDim);border-radius:3px;background:var(--panel2);
+    line-height:1.5}
+  #stats .chip:hover{border-color:var(--border)}
+  #stats .chip-num{color:var(--accent);font-weight:bold;display:inline-block;
+    min-width:1ch;text-align:right;transition:color .25s}
+  #stats .chip.ticking .chip-num{color:var(--green)}
+  #stats .chip-lbl{color:var(--sub);font-size:.95em}
   #stats .coin{width:12px;height:12px;image-rendering:pixelated;vertical-align:-2px}
-  #stats .sep{color:var(--border)}
   canvas{flex:1;image-rendering:pixelated;width:100%;height:100%}
   /* panels */
   #panel-holder{position:absolute;inset:0;pointer-events:none}
@@ -385,14 +391,16 @@
   <div id="hdr">
     <span>☤ HERMES PIXEL OFFICE</span>
     <div id="stats">
-      <span class="st" title="currency — points earned per tool call">
-        <img class="coin" src="icons/op.webp" alt=""> <b id="st-ops">0</b> Ops</span>
-      <span class="sep">·</span>
-      <span class="st" title="tool calls"><b id="st-tools">0</b> calls</span>
-      <span class="sep">·</span>
-      <span class="st" title="sessions run"><b id="st-sess">0</b> sessions</span>
-      <span class="sep">·</span>
-      <span class="st" title="total time ran"><b id="st-time">0s</b> ran</span>
+      <span class="chip" id="chip-ops" title="Ops — currency earned per tool call (your leaderboard row)">
+        <img class="coin" src="icons/op.webp" alt=""><b class="chip-num" id="st-ops">0</b><span class="chip-lbl">Ops</span></span>
+      <span class="chip" id="chip-calls" title="Tool calls run (your leaderboard row)">
+        <b class="chip-num" id="st-tools">0</b><span class="chip-lbl">calls</span></span>
+      <span class="chip" id="chip-sess" title="Sessions run (your leaderboard row)">
+        <b class="chip-num" id="st-sess">0</b><span class="chip-lbl">sessions</span></span>
+      <span class="chip" id="chip-ran" title="Total agent time ran (your leaderboard row)">
+        <b class="chip-num" id="st-time">0s</b><span class="chip-lbl">ran</span></span>
+      <span class="chip" id="chip-agents" title="Agents currently in the office">
+        <b class="chip-num" id="st-agents">0</b><span class="chip-lbl">agents</span></span>
     </div>
     <span style="flex:1"></span>
     <span class="dim" id="count">connecting…</span>
@@ -524,6 +532,69 @@ function iconPathLarge(name){return "icons/large/"+(name||"001_Wood_Heraldic_Shi
 function tierCalls(ops){return Math.ceil((Number(ops)||0)/2);}
 function tierSessions(ops){return Math.ceil(tierCalls(ops)/150);}
 function timeStr(ts){const d=new Date(ts*1000);return d.toTimeString().slice(0,5)}
+
+// ── top-bar stat chips ─────────────────────────────────────────────────
+// Ops / calls / sessions / ran come from the ACTIVE user's leaderboard row
+// (falling back to the global fold), agents is the live office population.
+// Every number is eased up with requestAnimationFrame so it ticks instead of
+// snapping, and the chip flashes green for a beat when it gains.
+const STAT_ANIM={};
+function statValues(st){
+  const board=mergeBoards(currentBoard(),loadCachedBoard());
+  const gh=(st&&st.identity&&st.identity.github)||"";
+  let row=null;
+  if(gh) row=board.find(r=>r.github&&String(r.github).toLowerCase()===String(gh).toLowerCase());
+  if(!row) row=localRow()||null;
+  const gs=(st&&st.stats)||{};
+  const pick=(k)=>row&&row[k]!=null?row[k]:gs[k];
+  return {
+    ops: Number(pick("ops")||0),
+    tools: Number(pick("tools")||0),
+    sessions: Number(pick("sessions")||0),
+    time_s: (row&&row.time_s!=null)?Number(row.time_s)||0:Number(pick("time_ms")||0)/1000,
+    agents: ((st&&st.agents)||[]).length,
+  };
+}
+function statFmt(key,v){
+  if(key==="time_s") return fmtTime(v);
+  return fmtNum(v);
+}
+function statTick(key,target,fmtEl,chipEl){
+  const prev=STAT_ANIM[key];
+  if(!prev){ STAT_ANIM[key]={from:target,to:target}; fmtEl.textContent=statFmt(key,target); return; }
+  if(prev.to===target) return;
+  // A 1.5s poll can land mid-ramp with the same value the ramp is heading to.
+  // Restarting from `prev.to` would snap the digits, so when the poll agrees
+  // with the in-flight target we let the existing ramp finish untouched.
+  if(prev.animating&&prev.to===target) return;
+  const from=prev.to;
+  STAT_ANIM[key]={from,to:target,animating:true};
+  if(chipEl&&target>from){
+    chipEl.classList.add("ticking");
+    clearTimeout(chipEl._tickT);
+    chipEl._tickT=setTimeout(()=>chipEl.classList.remove("ticking"),700);
+  }
+  const t0=performance.now(), dur=target>from?900:250;
+  function step(now){
+    const cur=STAT_ANIM[key];
+    if(!cur||cur.to!==target) return;   // superseded by a newer value
+    const p=Math.min(1,(now-t0)/dur);
+    const e=1-Math.pow(1-p,3);          // ease-out cubic
+    fmtEl.textContent=statFmt(key,from+(target-from)*e);
+    if(p<1) requestAnimationFrame(step);
+    else fmtEl.textContent=statFmt(key,target);
+  }
+  requestAnimationFrame(step);
+}
+function renderStatChips(st){
+  const v=statValues(st);
+  for(const key of ["ops","tools","sessions","time_s","agents"]){
+    const id={ops:"st-ops",tools:"st-tools",sessions:"st-sess",time_s:"st-time",agents:"st-agents"}[key];
+    const el=document.getElementById(id);
+    if(!el) continue;
+    statTick(key,v[key],el,el.closest(".chip"));
+  }
+}
 function isDev(g){return /^(drgekoz|teknium1|jnorthrup)$/i.test(g||"")}
 function isMe(id){return state&&state.identity&&(id===state.identity.github||id===state.identity.name)}
 
@@ -978,7 +1049,7 @@ function drawChar(a,fx,fy,seated){
   if(h%4===0){px(x+2,y+3,2,1,"#222a44");px(x+4,y+3,2,1,"#222a44")}
   else{px(x+3,y+3,1,1,"#111");px(x+5,y+3,1,1,"#111")}
   px(x+1,y+5,6,5,shirt);
-  if(a.kind==="subagent")px(x+1,y+5,6,1,"#e8c170");
+  if(a.kind==="subagent"||a.kind==="background")px(x+1,y+5,6,1,"#e8c170");
   px(x+0,y+6,1,3,skin); px(x+7,y+6,1,3,skin);
   if(walking){
     if(t%2){px(x+2,y+10,1,3,"#2d2d3d");px(x+5,y+11,1,2,"#2d2d3d")}
@@ -1013,7 +1084,7 @@ function drawBubble(a,x,y){
 }
 function label(a,x,y){
   ctx.font="10px ui-monospace,monospace";ctx.textAlign="center";
-  ctx.fillStyle=a.kind==="subagent"?"#e8c170":"#cfc4e8";
+  ctx.fillStyle=(a.kind==="subagent"||a.kind==="background")?"#e8c170":"#cfc4e8";
   ctx.fillText(a.label.slice(0,17),(x+8)*S,(y+18.5)*S);
   const st=a.status==="waiting"?"needs input!"
         :a.status==="working"?(a.tool||"working"):a.status;
@@ -1043,7 +1114,7 @@ function stepChars(perRow){
     else { c.x+=dx/d*WALK; c.y+=dy/d*WALK; }
     if(c.lastStatus!==a.status){
       if(a.status==="waiting")chime([880,660,880]);
-      else if(a.status==="done"&&a.kind==="subagent")chime([520,780]);
+      else if(a.status==="done"&&(a.kind==="subagent"||a.kind==="background"))chime([520,780]);
       c.lastStatus=a.status;
     }
   });
@@ -2181,12 +2252,8 @@ function applyState(st){
   const n=agents.length, w=agents.filter(a=>a.status==="waiting").length;
   document.getElementById("count").textContent=
     n+" agent"+(n===1?"": "s")+(w?" · "+w+" waiting!":"");
-  // stats strip — to the LEFT of the count
-  const gs=(st&&st.stats)||{};
-  document.getElementById("st-ops").textContent=fmtNum(gs.ops||0);
-  document.getElementById("st-tools").textContent=fmtNum(gs.tools||0);
-  document.getElementById("st-sess").textContent=fmtNum(gs.sessions||0);
-  document.getElementById("st-time").textContent=fmtTime(gs.time_ms?gs.time_ms/1000:0);
+  // stats strip — animated chips to the LEFT of the count
+  renderStatChips(st);
   // Attach live agent status (from the office scene) to every row's roster so
   // profile AGENTS lists show real-time state even before the server restarts.
   if(st.agents&&st.agents.length){
@@ -2222,10 +2289,29 @@ function applyState(st){
   checkTierUnlock();
 }
 // Global refresh — pull /state + re-render (used by profile save/logout/icon pickers).
+// State is read same-origin first; when the page is served from another origin
+// (launcher / file:// / a helper port) it falls back to the plugin's own
+// /api/state proxy so there is still only ONE fetch path and no CORS wall.
 let polling=false;
+const STATE_URLS=["/api/state","http://127.0.0.1:8113/state"];
+let stateUrlIdx=0;
+async function fetchState(){
+  let lastErr=null;
+  for(let i=0;i<STATE_URLS.length;i++){
+    const url=STATE_URLS[(stateUrlIdx+i)%STATE_URLS.length];
+    try{
+      const r=await fetch(url,{cache:"no-store"});
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const j=await r.json();
+      stateUrlIdx=(stateUrlIdx+i)%STATE_URLS.length;
+      return j;
+    }catch(e){lastErr=e;}
+  }
+  throw lastErr||new Error("state unreachable");
+}
 async function pollNow(){
   if(polling)return; polling=true;
-  try{const r=await fetch("state");applyState(await r.json());}
+  try{applyState(await fetchState());}
   catch(e){offline=String(location.host);agents=[];state=null;
     document.getElementById("count").textContent="offline";}
   polling=false;
